@@ -49,6 +49,9 @@ public:
 	template <typename T>
 	void destroy_shared_memory_object(const std::string &name);
 
+	template <typename T>
+	T* find_or_construct_shared_memory_object(const std::string &name, T default_data);
+
 	std::string get_channel_name() {
 		return channel_name;
 	}

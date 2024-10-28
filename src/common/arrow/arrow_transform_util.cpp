@@ -16,6 +16,8 @@
 #include <arrow/status.h>
 #include <string>
 #include <thread>
+#include <iostream>
+#include <sched.h>
 
 namespace duckdb {
 
@@ -69,11 +71,19 @@ void WriteArrowTableToSharedMemory(std::shared_ptr<arrow::Table> &table, SharedM
 
 	char *shm_ptr = shm.create_shared_memory_object<char>(shm_id, buffer->size());
 	std::memcpy(shm_ptr, buffer->data(), buffer->size());
+	int* cpu_id = shm.find_or_construct_shared_memory_object<int>("cpu_id", -1);
+	*cpu_id = sched_getcpu();
+	// std::cout<<"write db thread id : "<< std::this_thread::get_id() <<"   cpu core: " << sched_getcpu() << "          "<< *cpu_id  << std::endl;
 }
 
 std::shared_ptr<arrow::Table> ReadArrowTableFromSharedMemory(SharedMemoryManager &shm, const std::string &shm_id) {
 	auto shm_table_pair = shm.open_shared_memory_object<char>(shm_id);
-
+	int* cpu_id = shm.find_or_construct_shared_memory_object<int>("cpu_id", -1);
+	cpu_set_t cpuset;
+	CPU_ZERO(&cpuset);
+	CPU_SET(*cpu_id, &cpuset);
+	sched_setaffinity(0, sizeof(cpuset), &cpuset);
+	// std::cout<<"read db thread id : "<< std::this_thread::get_id() <<"   cpu core: " << sched_getcpu() << "          "<< *cpu_id  << std::endl;
 	if (shm_table_pair.first == nullptr) {
 		throw std::runtime_error("[BOOST SHARED MEMORY] Cannot find shared memory with id: " + shm.get_channel_name() +
 		                         shm_id);

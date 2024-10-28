@@ -1,50 +1,41 @@
-import pyarrow as pa
-import numpy as np
 import pandas as pd
-import onnxruntime as ort
+import pyarrow as pa
+import pickle
+import numpy as np
+
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import StandardScaler
 from threadpoolctl import threadpool_limits
 
-limits_threads = 0
-with open("/root/workspace/duckdb/.vscode/experiment_cfg/ml_thread.cfg", "r") as f:
-    limits_threads = int(f.readline().strip())
-
-@threadpool_limits.wrap(limits=limits_threads)
+@threadpool_limits.wrap(limits=16)
 def process_table(table):
     root_model_path = "/root/workspace/duckdb/examples/embedded-c++/imbridge_test/data/test_raven"
-    onnx_path = f'{root_model_path}/Flights/flights_rf_pipeline.onnx'
-    core = limits_threads
-    ortconfig = ort.SessionOptions()
-    ortconfig.inter_op_num_threads = core
-    ortconfig.intra_op_num_threads = 1
-    flights_onnx_session = ort.InferenceSession(onnx_path, sess_options=ortconfig)
-    flights_label = flights_onnx_session.get_outputs()[0]
-    numerical_columns = ['slatitude', 'slongitude', 'dlatitude', 'dlongitude']
-    categorical_columns = ['name1', 'name2', 'name4', 'acountry', 'active', 'scity', 'scountry', 'stimezone', 'sdst',
-                        'dcity', 'dcountry', 'dtimezone', 'ddst']
-    flights_input_columns = numerical_columns + categorical_columns
-    flights_type_map = {
-        'int32': np.int64,
-        'int64': np.int64,
-        'float64': np.float32,
-        'object': str,
-    }
+    scaler_path = f'{root_model_path}/Hospital/hospital_standard_scale_model.pkl'
+    enc_path = f'{root_model_path}/Hospital/hospital_one_hot_encoder.pkl'
+    model_path = f'{root_model_path}/Hospital/hospital_lr_model.pkl'
+    with open(scaler_path, 'rb') as f:
+        scaler = pickle.load(f)
+    with open(enc_path, 'rb') as f:
+        enc = pickle.load(f)
+    with open(model_path, 'rb') as f:
+        model = pickle.load(f)
+
+    data = table.to_pandas().values
+    data = np.split(data, np.array([10]), axis=1)
+    numerical = data[0]
+    categorical = data[1]
     
-    def udf_wrap(*args):
-        infer_batch = {
-            elem: args[i].to_numpy().astype(flights_type_map[args[i].to_numpy().dtype.name]).reshape((-1, 1))
-            for i, elem in enumerate(flights_input_columns)
-        }
-        outputs = flights_onnx_session.run([flights_label.name], infer_batch)
-        return outputs[0]
-    df = pd.DataFrame(udf_wrap(*table))
-    # print(len(df))
+    X = np.hstack((scaler.transform(numerical), enc.transform(categorical).toarray()))
+    res = model.predict(X)
+    df = pd.DataFrame(res)
     return pa.Table.from_pandas(df)
-        
+    
 
 class MyProcess:
     def __init__(self):
         # load model part
         pass
+
 
     def process(self, table):
         # print(table.num_rows)

@@ -6,6 +6,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <sched.h>
 
 using namespace duckdb;
 using namespace imbridge;
@@ -51,12 +52,18 @@ int main(int argc, char **argv) {
 		PyErr_Print();
 		return 0;
 	}
-
+	cpu_set_t cpuset;
 	while (true) {
 		shm_server.sem_server->wait();
 		if (!shm_server.is_alive()) {
 			break;
 		}
+		int *cpu_core_id = shm_server.find_or_construct_shared_memory_object<int>("cpu_id", -1);
+		
+		CPU_ZERO(&cpuset);
+		CPU_SET(*cpu_core_id, &cpuset);
+		sched_setaffinity(0, sizeof(cpuset), &cpuset);
+		// std::cout<<"python threads id : "<< channel_name <<" now  cpu core: " << sched_getcpu() << "   db cpu core : " << *cpu_core_id <<std::endl;
 		std::shared_ptr<arrow::Table> my_table = imbridge::ReadArrowTableFromSharedMemory(shm_server, INPUT_TABLE);
 
 		PyObject *py_table_tmp = arrow::py::wrap_table(std::move(my_table));

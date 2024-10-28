@@ -35,8 +35,14 @@ void SharedMemoryManager::destroy_shared_memory_object(const std::string &name) 
 	segment.destroy<T>((channel_name + name).c_str());
 }
 
+template <typename T>
+T* SharedMemoryManager::find_or_construct_shared_memory_object(const std::string &name, T default_data){
+	return segment.find_or_construct<T>((channel_name+name).c_str())(default_data);
+}
+
 template char* SharedMemoryManager::create_shared_memory_object<char>(const std::string &name, size_t size);
 template std::pair<char*, size_t> SharedMemoryManager::open_shared_memory_object<char>(const std::string &name);
 template void SharedMemoryManager::destroy_shared_memory_object<char>(const std::string &name);
+template int* SharedMemoryManager::find_or_construct_shared_memory_object<int>(const std::string &name, int default_data);
 } // namespace imbridge
 } // namespace duckdb
