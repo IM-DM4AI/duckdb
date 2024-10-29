@@ -4,9 +4,9 @@
 #include <arrow/python/pyarrow.h>
 #include <fstream>
 #include <iostream>
+#include <sched.h>
 #include <sstream>
 #include <string>
-#include <sched.h>
 
 using namespace duckdb;
 using namespace imbridge;
@@ -24,12 +24,12 @@ int main(int argc, char **argv) {
 	}
 	PyGILState_STATE gstate;
 	gstate = PyGILState_Ensure();
-	
+
 	PyObject *dycacher = PyImport_ImportModule("dycacher");
-    if (!dycacher) {
-        PyErr_Print();
-    }
-	
+	if (!dycacher) {
+		PyErr_Print();
+	}
+
 	if (arrow::py::import_pyarrow()) {
 		std::cout
 		    << "[Server] import pyarrow error! make sure your default python environment has installed the pyarrow\n";
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
 	PyObject *main_dict = PyModule_GetDict(main_module);
 	PyObject *MyProcess = PyDict_GetItemString(main_dict, "MyProcess");
 	PyObject *my_process_instance = PyObject_CallObject(MyProcess, NULL);
-	if(my_process_instance == NULL) {
+	if (my_process_instance == NULL) {
 		PyErr_Print();
 		return 0;
 	}
@@ -59,11 +59,14 @@ int main(int argc, char **argv) {
 			break;
 		}
 		int *cpu_core_id = shm_server.find_or_construct_shared_memory_object<int>("cpu_id", -1);
-		
+		// int now_cpu_id = sched_getcpu();
+		// if (now_cpu_id != *cpu_core_id) {
 		CPU_ZERO(&cpuset);
 		CPU_SET(*cpu_core_id, &cpuset);
 		sched_setaffinity(0, sizeof(cpuset), &cpuset);
-		// std::cout<<"python threads id : "<< channel_name <<" now  cpu core: " << sched_getcpu() << "   db cpu core : " << *cpu_core_id <<std::endl;
+		// std::cout<<"python threads id : "<< channel_name <<" now  cpu core: " << sched_getcpu() << "   db cpu
+		// core : " << *cpu_core_id <<std::endl;
+		// }
 		std::shared_ptr<arrow::Table> my_table = imbridge::ReadArrowTableFromSharedMemory(shm_server, INPUT_TABLE);
 
 		PyObject *py_table_tmp = arrow::py::wrap_table(std::move(my_table));
@@ -71,7 +74,7 @@ int main(int argc, char **argv) {
 
 		if (py_result != NULL) {
 			my_table = arrow::py::unwrap_table(py_result).ValueOrDie();
-		}else{
+		} else {
 			PyErr_Print();
 			return 0;
 		}
@@ -82,6 +85,6 @@ int main(int argc, char **argv) {
 	// std::cout << "[Server] udf server " << channel_name << " closed\n";
 	shm_server.sem_client->post();
 	PyGILState_Release(gstate);
-    Py_Finalize();
+	Py_Finalize();
 	return 0;
 }

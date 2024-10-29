@@ -7,7 +7,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 from threadpoolctl import threadpool_limits
 
-@threadpool_limits.wrap(limits=16)
+@threadpool_limits.wrap(limits=1)
 def process_table(table):
     root_model_path = "/root/workspace/duckdb/examples/embedded-c++/imbridge_test/data/test_raven"
     scaler_path = f'{root_model_path}/Hospital/hospital_standard_scale_model.pkl'

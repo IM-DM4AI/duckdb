@@ -16,6 +16,8 @@
 #else
 #include <queue>
 #endif
+#include <iostream>
+#include <sched.h>
 
 namespace duckdb {
 
@@ -273,7 +275,13 @@ void TaskScheduler::ExecuteTasks(idx_t max_tasks) {
 }
 
 #ifndef DUCKDB_NO_THREADS
-static void ThreadExecuteTasks(TaskScheduler *scheduler, atomic<bool> *marker) {
+static void ThreadExecuteTasks(TaskScheduler *scheduler, atomic<bool> *marker, int core_id) {
+	cpu_set_t cpuset;
+	CPU_ZERO(&cpuset);
+	CPU_SET(core_id, &cpuset);
+	sched_setaffinity(0, sizeof(cpuset), &cpuset);
+	// std::cout << "thread id :" << std::this_thread::get_id() << "        core_id : " << core_id
+	//           << "  now core :  " << sched_getcpu() << std::endl;
 	scheduler->ExecuteForever(marker);
 }
 #endif
@@ -332,6 +340,7 @@ void TaskScheduler::RelaunchThreads() {
 
 void TaskScheduler::RelaunchThreadsInternal(int32_t n) {
 #ifndef DUCKDB_NO_THREADS
+	int core_id = 20;
 	auto &config = DBConfig::GetConfig(db);
 	auto new_thread_count = NumericCast<idx_t>(n);
 	if (threads.size() == new_thread_count) {
@@ -361,8 +370,9 @@ void TaskScheduler::RelaunchThreadsInternal(int32_t n) {
 			unique_ptr<thread> worker_thread;
 			std::string sub_thread_id;
 			try {
-				worker_thread = make_uniq<thread>(ThreadExecuteTasks, this, marker.get());
+				worker_thread = make_uniq<thread>(ThreadExecuteTasks, this, marker.get(), core_id);
 				sub_thread_id = imbridge::thread_id_to_string(worker_thread->get_id());
+				core_id++;
 			} catch (std::exception &ex) {
 				// thread constructor failed - this can happen when the system has too many threads allocated
 				// in this case we cannot allocate more threads - stop launching them
