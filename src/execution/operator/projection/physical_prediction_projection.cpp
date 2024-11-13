@@ -8,9 +8,9 @@ namespace duckdb {
 
 namespace imbridge {
 
-#define NEXT_EXE_ADAPT(STATE, X, SIZE, Y, Z, IF_RET_TYPE, ELSE_RET_TYPE, RET) \
+#define NEXT_EXE_ADAPT(CTX, STATE, X, SIZE, Y, Z, IF_RET_TYPE, ELSE_RET_TYPE, RET) \
 auto &batch = X->NextBatch(SIZE); \
-X->ExternalProjectionReset(*Y, STATE.executor); \
+X->ExternalProjectionReset(CTX, *Y, STATE.executor); \
 STATE.tuner.StartProfile(); \
 STATE.executor.Execute(batch, *Y); \
 STATE.tuner.EndProfile(); \
@@ -93,7 +93,7 @@ OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &conte
     case BatchControllerState::SLICING: {
         batch_size = state.tuner.GetBatchSize();
         if (controller->HasNext(batch_size)) {
-            NEXT_EXE_ADAPT(state, controller, batch_size, out_buf, chunk,
+            NEXT_EXE_ADAPT(context.client, state, controller, batch_size, out_buf, chunk,
              OperatorResultType::HAVE_MORE_OUTPUT, OperatorResultType::HAVE_MORE_OUTPUT, ret);
         } else {
             // check wheather the buffer should be reset
@@ -114,7 +114,7 @@ OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &conte
         ret = OperatorResultType::NEED_MORE_INPUT;
 
         if (remained > 0) {
-            controller->PushChunk(input, padded, input.size());
+            controller->PushChunk(context.client, input, padded, input.size());
             if (remained < batch_size) {
                 controller->SetState(BatchControllerState::BUFFERRING); 
             } else {
@@ -130,14 +130,14 @@ OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &conte
         batch_size = state.tuner.GetBatchSize();
 
         if (controller->GetSize() + input.size() < batch_size) {
-            controller->PushChunk(input);
+            controller->PushChunk(context.client, input);
             controller->SetState(BatchControllerState::BUFFERRING);
             ret = OperatorResultType::NEED_MORE_INPUT;
         } else {
             padded = batch_size - controller->GetSize();
-            controller->PushChunk(input, 0, padded);
+            controller->PushChunk(context.client, input, 0, padded);
 
-            NEXT_EXE_ADAPT(state, controller, batch_size, out_buf, chunk, 
+            NEXT_EXE_ADAPT(context.client, state, controller, batch_size, out_buf, chunk, 
             OperatorResultType::HAVE_MORE_OUTPUT, OperatorResultType::HAVE_MORE_OUTPUT, ret);
 
             controller->SetState(BatchControllerState::EMPTY);
@@ -197,11 +197,11 @@ OperatorFinalizeResultType PhysicalPredictionProjection::FinalExecute(ExecutionC
     }
 
     if (controller->HasNext(batch_size)) {
-        NEXT_EXE_ADAPT(local, controller, batch_size, out_buf, chunk, 
+        NEXT_EXE_ADAPT(context.client, local, controller, batch_size, out_buf, chunk, 
         OperatorFinalizeResultType::HAVE_MORE_OUTPUT, OperatorFinalizeResultType::HAVE_MORE_OUTPUT, ret);
     } else {
         if (controller->GetSize() > 0) {
-            NEXT_EXE_ADAPT(local, controller, controller->GetSize(), out_buf, chunk, 
+            NEXT_EXE_ADAPT(context.client, local, controller, controller->GetSize(), out_buf, chunk, 
             OperatorFinalizeResultType::HAVE_MORE_OUTPUT, OperatorFinalizeResultType::FINISHED, ret);
         } 
     }

@@ -199,7 +199,7 @@ namespace imbridge {
         store.SetCardinality(0);
     }
 
-    void BatchController::PushChunk(const DataChunk &other, idx_t start_offset, idx_t stop_offset) {
+    void BatchController::PushChunk(ClientContext &context, const DataChunk &other, idx_t start_offset, idx_t stop_offset) {
         D_ASSERT(state != BatchControllerState::SLICING);
         idx_t count = stop_offset - start_offset;
         idx_t new_offset = high_offset + count;
@@ -214,8 +214,8 @@ namespace imbridge {
             auto new_capacity = NextPowerOfTwo(new_offset);
             for (idx_t i = 0; i < store.ColumnCount(); i++) {
                 store.data[i].Resize(high_offset, new_capacity);
-
 	            AssignSharedPointer(sliced.data[i].auxiliary, store.data[i].auxiliary);
+                store.ResizeCache(context, i, new_capacity);
             }
             store.capacity = new_capacity;
             sliced.capacity = new_capacity;
@@ -228,8 +228,8 @@ namespace imbridge {
         high_offset = new_offset;
     }
 
-    void BatchController::PushChunk(const DataChunk &other) {
-        PushChunk(other, 0, other.size());
+    void BatchController::PushChunk(ClientContext &context, const DataChunk &other) {
+        PushChunk(context, other, 0, other.size());
     }
 
     DataChunk & BatchController::NextBatch(idx_t required) {
@@ -257,7 +257,7 @@ namespace imbridge {
     }
 
     // helper methods
-    void BatchController::ExternalProjectionReset(DataChunk &input, ExpressionExecutor &executor) {
+    void BatchController::ExternalProjectionReset(ClientContext &context, DataChunk &input, ExpressionExecutor &executor) {
         for (idx_t i = 0; i < input.ColumnCount(); i++) {
             input.data[i].ResetFromCache(input.vector_caches[i]);
         }
@@ -265,13 +265,14 @@ namespace imbridge {
             auto new_capacity = store.capacity;
             for (idx_t i = 0; i < input.ColumnCount(); i++) {
                 input.data[i].Resize(0, new_capacity);
+                input.ResizeCache(context, i, new_capacity);
             }
             input.capacity = store.capacity;
 
             // resize all the intermediate chunks in executor
             auto &executor_states = executor.GetStates();
             for(auto &executor_state: executor_states) {
-                executor_state->root_state->UpdateCapacity(store.capacity);
+                executor_state->root_state->UpdateCapacity(context, store.capacity);
             }
         }
     }

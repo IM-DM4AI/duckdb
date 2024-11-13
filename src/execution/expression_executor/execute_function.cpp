@@ -91,7 +91,7 @@ void ExpressionExecutor::Execute(const BoundFunctionExpression &expr, Expression
 
 		shm.destroy_shared_memory_object<char>(imbridge::INPUT_TABLE);
 		shm.destroy_shared_memory_object<char>(imbridge::OUTPUT_TABLE);
-		int cols = my_table->num_columns(), rows = my_table->num_rows();
+		// int cols = my_table->num_columns(), rows = my_table->num_rows();
 		// std::vector<int64_t> res;
 		// for (int i = 0; i < my_table->num_columns(); i++) {
 		// 	std::shared_ptr<arrow::ChunkedArray> column = my_table->column(i);

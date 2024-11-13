@@ -23,16 +23,17 @@ void ExpressionState::Finalize(bool empty, idx_t capacity) {
 	}
 }
 
-void ExpressionState::UpdateCapacity(idx_t capacity) {
+void ExpressionState::UpdateCapacity(ClientContext &context, idx_t capacity) {
 	if (capacity > intermediate_chunk.GetCapacity()) {
 
         for (idx_t i = 0; i < intermediate_chunk.ColumnCount(); i++) {
 			intermediate_chunk.data[i].Resize(0, capacity);
+			intermediate_chunk.ResizeCache(context, i, capacity);
 		}
 		intermediate_chunk.SetCapacity(capacity);
 	}
 	for (auto &state: child_states) {
-		state->UpdateCapacity(capacity);
+		state->UpdateCapacity(context, capacity);
 	}
 }
 

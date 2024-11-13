@@ -32,7 +32,7 @@ struct ExpressionState {
 public:
 	void AddChild(Expression *expr, idx_t capacity = STANDARD_VECTOR_SIZE);
 	void Finalize(bool empty = false, idx_t capacity = STANDARD_VECTOR_SIZE);
-	void UpdateCapacity(idx_t capacity);
+	void UpdateCapacity(ClientContext &context, idx_t capacity);
 	Allocator &GetAllocator();
 	bool HasContext();
 	DUCKDB_API ClientContext &GetContext();

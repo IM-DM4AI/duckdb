@@ -58,6 +58,14 @@ void DataChunk::Initialize(Allocator &allocator, vector<LogicalType>::const_iter
 	}
 }
 
+void DataChunk::ResizeCache(ClientContext &context, idx_t col_idx, idx_t new_size){
+	D_ASSERT(col_idx < ColumnCount());
+	Allocator &allocator = Allocator::Get(context);
+	const LogicalType &type = data[col_idx].GetType();
+	VectorCache cache(allocator, type, new_size);
+	vector_caches[col_idx] = std::move(cache);
+}
+
 void DataChunk::Initialize(ClientContext &context, vector<LogicalType>::const_iterator begin,
                            vector<LogicalType>::const_iterator end, idx_t capacity_p) {
 	Initialize(Allocator::Get(context), begin, end, capacity_p);
