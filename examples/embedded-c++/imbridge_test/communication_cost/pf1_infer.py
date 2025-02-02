@@ -60,17 +60,17 @@ FROM pf1_used_data;
 '''
 
 if sys.argv[1] == "udf":
-    s = time.time()
+    s = time.perf_counter()
     res_data = con.sql(sql1).fetch_arrow_table()
     # udf(*res_data)
-    e = time.time()
+    e = time.perf_counter()
     t = e-s
     print(f"udf : {t}")
 else:
-    s = time.time()
+    s = time.perf_counter()
     res_data = con.sql(sql2)
     # udf(*res_data)
-    e = time.time()
+    e = time.perf_counter()
     t = e-s
     print(f"origin : {t}")
 

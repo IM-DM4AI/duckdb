@@ -41,7 +41,7 @@ int main() {
 	create_data(con);
 	con.Query("SET threads = 1");
 	// con.Query("SELECT * FROM data LIMIT 10")->Print();
-	con.CreateVectorizedFunction<double, double, double>("udf_vectorized_int", &udf_tmp<double, 2>, LogicalType::INVALID, FunctionKind::PREDICTION, 0);
+	con.CreateVectorizedFunction<double, double, double>("udf_vectorized_int", &udf_tmp<double, 2>, LogicalType::INVALID, FunctionKind::BATCH_PREDICTION, 0);
 	clock_t start_time=clock();
 	con.Query("SELECT i, udf_vectorized_int(i, age) FROM data")->Print();
 	clock_t end_time=clock();

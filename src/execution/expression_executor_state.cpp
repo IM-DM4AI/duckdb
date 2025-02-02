@@ -23,16 +23,27 @@ void ExpressionState::Finalize(bool empty, idx_t capacity) {
 	}
 }
 
-void ExpressionState::UpdateCapacity(idx_t capacity) {
+unique_ptr<ExpressionState> ExpressionState::CopyState() {
+	unique_ptr<ExpressionState> new_state =
+	    ExpressionExecutor::InitializeState(expr, root, intermediate_chunk.GetCapacity());
+	new_state->types = types;
+	for (auto &child : child_states) {
+		new_state->child_states.push_back(child->CopyState());
+	}
+	return new_state;
+}
+
+void ExpressionState::UpdateCapacity(ClientContext &context, idx_t capacity) {
 	if (capacity > intermediate_chunk.GetCapacity()) {
 
-        for (idx_t i = 0; i < intermediate_chunk.ColumnCount(); i++) {
+		for (idx_t i = 0; i < intermediate_chunk.ColumnCount(); i++) {
 			intermediate_chunk.data[i].Resize(0, capacity);
+			intermediate_chunk.ResizeCache(context, i, capacity);
 		}
 		intermediate_chunk.SetCapacity(capacity);
 	}
-	for (auto &state: child_states) {
-		state->UpdateCapacity(capacity);
+	for (auto &state : child_states) {
+		state->UpdateCapacity(context, capacity);
 	}
 }
 

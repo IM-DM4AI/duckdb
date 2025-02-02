@@ -9,7 +9,7 @@
 
 namespace duckdb {
 
-enum class FunctionKind: u_int8_t {COMMON = 0, PREDICTION=1};
+enum class FunctionKind: u_int8_t {COMMON = 0, BATCH_PREDICTION=1, ASYNC_PREDICTION=2, SCHEDULE_PREDICTION=3, ASYNC_BATCH_PREDICTION=4};
 
 #define DEFAULT_PREDICTION_BATCH_SIZE 2048U
 
@@ -37,6 +37,7 @@ public:
     vector<idx_t> user_batch_size_map;
     set<idx_t> root_idx_list;
     idx_t total_prediction_func_count;
+    FunctionKind kind;
 
 private:
 

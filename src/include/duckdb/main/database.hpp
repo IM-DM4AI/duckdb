@@ -16,6 +16,9 @@
 #include "duckdb/main/settings.hpp"
 
 namespace duckdb {
+namespace imbridge{
+	class IMLaneScheduler;
+} // namespace imbridge
 class BufferManager;
 class DatabaseManager;
 class StorageManager;
@@ -72,6 +75,10 @@ public:
 
 	void AddExtensionInfo(const string &name, const ExtensionLoadedInfo &info);
 
+	void ScheduleUDF(DataChunk &data, Vector &result, const ClientProperties &options);
+
+	DUCKDB_API void IMLaneResetCache();
+
 private:
 	void Initialize(const char *path, DBConfig *config);
 	void CreateMainDatabase();
@@ -82,6 +89,7 @@ private:
 	shared_ptr<BufferManager> buffer_manager;
 	unique_ptr<DatabaseManager> db_manager;
 	unique_ptr<TaskScheduler> scheduler;
+	unique_ptr<imbridge::IMLaneScheduler> imlane_scheduler;
 	unique_ptr<ObjectCache> object_cache;
 	unique_ptr<ConnectionManager> connection_manager;
 	unordered_map<string, ExtensionInfo> loaded_extensions_info;

@@ -45,7 +45,7 @@ max1 = 0
 res = 0
 flag = True
 for i in tqdm(range(times)):
-    s = time.time()
+    s = time.perf_counter()
     df1 = con.read.csv(f"{root_path}/Expedia_R1_hotels.csv", header=True, inferSchema=True)
     df1.createOrReplaceTempView("Expedia_R1_hotels")
 
@@ -96,7 +96,7 @@ for i in tqdm(range(times)):
 
     
     con.sql(sql2).collect()
-    e = time.time()
+    e = time.perf_counter()
     t = e-s
     print(f"{i+1} : {t} s")
     res = res + t

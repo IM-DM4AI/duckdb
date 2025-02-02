@@ -9,18 +9,42 @@ from sklearn.metrics import classification_report, confusion_matrix, f1_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
+from threadpoolctl import threadpool_limits
+@threadpool_limits.wrap(limits=1)
+def process_table(table):
+    scale = 40
+    name = "uc06"
+    root_model_path = f"/root/workspace/duckdb/examples/embedded-c++/imbridge_test/data/tpcxai_datasets/sf{scale}"
+    model_file_name = f"{root_model_path}/model/{name}/{name}.python.model"
+    model = joblib.load(model_file_name)
+    def udf(smart_5_raw,
+            smart_10_raw,
+            smart_184_raw,
+            smart_187_raw,
+            smart_188_raw,
+            smart_197_raw,
+            smart_198_raw):
+        data = pd.DataFrame({
+            'smart_5_raw': smart_5_raw,
+            'smart_10_raw': smart_10_raw,
+            'smart_184_raw': smart_184_raw,
+            'smart_187_raw': smart_187_raw,
+            'smart_188_raw': smart_188_raw,
+            'smart_197_raw': smart_197_raw,
+            'smart_198_raw': smart_198_raw
+        })
+        # print(data.shape)
+        return model.predict(data)
+    
+    df = pd.DataFrame(udf(*table))
+    # print(len(df))
+    return pa.Table.from_pandas(df)
 
 class MyProcess:
     def __init__(self):
         # load model part
-        self.scale = 10
-        self.name = "uc06"
-        self.root_model_path = f"/root/workspace/duckdb/examples/embedded-c++/imbridge_test/data/tpcxai_datasets/sf{self.scale}"
-        self.model_file_name = f"{self.root_model_path}/model/{self.name}/{self.name}.python.model"
-        self.model = joblib.load(self.model_file_name)
-
+        pass
 
     def process(self, table):
-        res = self.model.predict(table.to_pandas().values)
-        df = pd.DataFrame(res)
-        return pa.Table.from_pandas(df)
+        # print(table.num_rows)
+        return process_table(table)

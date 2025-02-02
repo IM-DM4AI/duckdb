@@ -23,10 +23,10 @@ static void udf_tmp(DataChunk &input, ExpressionState &state, Vector &result) {
 }
 
 int main() {
-	DuckDB db("/root/workspace/duckdb/examples/embedded-c++/imbridge_test/db/db_tpcx_ai_sf10.db");
+	DuckDB db("/root/workspace/duckdb/examples/embedded-c++/imbridge_test/db/db_tpcx_ai_sf40.db");
 	Connection con(db);
 	con.CreateVectorizedFunction<string_t, int64_t, string_t>("udf", &udf_tmp, LogicalType::INVALID,
-	                                                      FunctionKind::PREDICTION, 4096);
+	                                                      FunctionKind::BATCH_PREDICTION, 4096);
 
 	string sql = R"(
 explain analyze  select store, department, udf(store, department) 
@@ -40,10 +40,12 @@ group by store,department);
 	double min1, max1;
 	bool flag = true;
 	for (int i = 0; i < times; i++) {
-		clock_t start_time = clock();
+		auto start_time = std::chrono::high_resolution_clock::now();
 		con.Query(sql);
-		clock_t end_time = clock();
-		double t = (double)(end_time - start_time) / CLOCKS_PER_SEC;
+		auto end_time = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
+		double t = duration / 1e6;
+		printf("%d : %lf\n", i+1, t);
 		result += t;
 		if (flag) {
 			flag = false;
@@ -54,6 +56,8 @@ group by store,department);
 			max1 = std::max(max1, t);
 		}
 	}
+	printf("min : %lf\n", min1);
+	printf("max : %lf\n", max1);
 	result = result - min1 - max1;
 	times = times - 2;
 	printf("finished execute %lf s!\n", result / (times * 1.0));

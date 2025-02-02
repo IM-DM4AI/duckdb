@@ -127,6 +127,9 @@ public:
 	DUCKDB_API void Copy(DataChunk &other, const SelectionVector &sel, const idx_t source_count,
 	                     const idx_t offset = 0) const;
 
+	//! Reallocates the DataChunk VectorCache size
+	DUCKDB_API void ResizeCache(ClientContext &context, idx_t col_idx, idx_t new_size);
+
 	//! Splits the DataChunk in two
 	DUCKDB_API void Split(DataChunk &other, idx_t split_idx);
 

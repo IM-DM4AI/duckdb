@@ -27,8 +27,10 @@
 #include "duckdb/main/settings.hpp"
 #include "duckdb/main/stream_query_result.hpp"
 #include "duckdb/main/table_description.hpp"
-#include "duckdb/transaction/transaction_context.hpp"
 #include "duckdb/planner/expression/bound_parameter_data.hpp"
+#include "duckdb/transaction/transaction_context.hpp"
+
+#include <atomic>
 
 namespace duckdb {
 class Appender;
@@ -85,6 +87,10 @@ public:
 	unique_ptr<ClientData> client_data;
 	//! Data for the currently running transaction
 	TransactionContext transaction;
+	//! number of async tasks in process
+	std::atomic<idx_t> num_of_async_tasks;
+	//! upbound of the async tasks
+	idx_t upbound = 1024;
 
 public:
 	MetaTransaction &ActiveTransaction() {
@@ -194,6 +200,12 @@ public:
 
 	//! Process an error for display to the user
 	DUCKDB_API void ProcessError(ErrorData &error, const string &query) const;
+
+	//! Schedule the udf by imlane_scheduler
+	DUCKDB_API void ScheduleUDF(DataChunk &data, Vector &result);
+
+	//! Reset Dycacher Cache
+	DUCKDB_API void IMLaneResetCache();
 
 private:
 	//! Parse statements and resolve pragmas from a query

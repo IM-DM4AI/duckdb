@@ -8,7 +8,7 @@
 
 #pragma once
 #include "duckdb/common/arrow/arrow.hpp"
-#include "duckdb/common/ipc/shared_memory_manager.hpp"
+#include "imlane/ipc/shared_memory_manager.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/main/client_properties.hpp"
 

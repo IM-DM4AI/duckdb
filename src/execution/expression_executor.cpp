@@ -2,8 +2,8 @@
 
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/execution_context.hpp"
-#include "duckdb/storage/statistics/base_statistics.hpp"
 #include "duckdb/planner/expression/list.hpp"
+#include "duckdb/storage/statistics/base_statistics.hpp"
 
 namespace duckdb {
 
@@ -29,7 +29,8 @@ ExpressionExecutor::ExpressionExecutor(ClientContext &context, const vector<uniq
 	}
 }
 
-ExpressionExecutor::ExpressionExecutor(ClientContext &context, const vector<unique_ptr<Expression>> &exprs, idx_t capacity)
+ExpressionExecutor::ExpressionExecutor(ClientContext &context, const vector<unique_ptr<Expression>> &exprs,
+                                       idx_t capacity)
     : ExpressionExecutor(context) {
 	D_ASSERT(exprs.size() > 0);
 	for (auto &expr : exprs) {
@@ -107,7 +108,8 @@ void ExpressionExecutor::ExecuteExpression(Vector &result) {
 void ExpressionExecutor::ExecuteExpression(idx_t expr_idx, Vector &result) {
 	D_ASSERT(expr_idx < expressions.size());
 	D_ASSERT(result.GetType().id() == expressions[expr_idx]->return_type.id());
-	Execute(*expressions[expr_idx], states[expr_idx]->root_state.get(), nullptr, chunk ? chunk->size() : 1, result);
+	unique_ptr<ExpressionState> new_state = states[expr_idx]->root_state->CopyState();
+	Execute(*expressions[expr_idx], new_state.get(), nullptr, chunk ? chunk->size() : 1, result);
 }
 
 Value ExpressionExecutor::EvaluateScalar(ClientContext &context, const Expression &expr, bool allow_unfoldable) {
@@ -147,8 +149,8 @@ void ExpressionExecutor::Verify(const Expression &expr, Vector &vector, idx_t co
 #endif
 }
 
-unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const Expression &expr,
-                                                                ExpressionExecutorState &state, idx_t capacity) {
+unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const Expression &expr, ExpressionExecutorState &state,
+                                                                idx_t capacity) {
 	switch (expr.expression_class) {
 	case ExpressionClass::BOUND_REF:
 		return InitializeState(expr.Cast<BoundReferenceExpression>(), state, capacity);
@@ -175,6 +177,14 @@ unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const Expression
 	}
 }
 
+unique_ptr<ExpressionExecutor> ExpressionExecutor::Copy() {
+	unique_ptr<ExpressionExecutor> new_executor = make_uniq<ExpressionExecutor>(GetContext());
+	for (idx_t i = 0; i < expressions.size(); i++) {
+		new_executor->AddExpression(*expressions[i]);
+	}
+	return new_executor;
+}
+
 void ExpressionExecutor::Execute(const Expression &expr, ExpressionState *state, const SelectionVector *sel,
                                  idx_t count, Vector &result) {
 #ifdef DEBUG
@@ -189,9 +199,9 @@ void ExpressionExecutor::Execute(const Expression &expr, ExpressionState *state,
 		return;
 	}
 	if (result.GetType().id() != expr.return_type.id()) {
-		throw InternalException(
-		    "ExpressionExecutor::Execute called with a result vector of type %s that does not match expression type %s",
-		    result.GetType(), expr.return_type);
+		throw InternalException("ExpressionExecutor::Execute called with a result vector of type %s that does not "
+		                        "match expression type %s",
+		                        result.GetType(), expr.return_type);
 	}
 	switch (expr.expression_class) {
 	case ExpressionClass::BOUND_BETWEEN:

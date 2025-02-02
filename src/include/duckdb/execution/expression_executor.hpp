@@ -77,6 +77,9 @@ public:
 	//! Initialize the state of a given expression
 	static unique_ptr<ExpressionState> InitializeState(const Expression &expr, ExpressionExecutorState &state, idx_t capacity = STANDARD_VECTOR_SIZE);
 
+	//! Copy executor
+	unique_ptr<ExpressionExecutor> Copy();
+
 	inline void SetChunk(DataChunk *chunk) {
 		this->chunk = chunk;
 	}

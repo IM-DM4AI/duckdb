@@ -1,8 +1,8 @@
 import duckdb
 name = "tpcx_ai"
 
-# only 10, 30, 60, 100
-scale = 30
+# only 10, 30, 40, 60, 100
+scale = 40
 
 data_root_path = f"/root/workspace/duckdb/examples/embedded-c++/imbridge_test/data/tpcxai_datasets/sf{scale}/serving"
 

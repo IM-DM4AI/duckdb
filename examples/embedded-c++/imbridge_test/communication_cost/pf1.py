@@ -48,15 +48,15 @@ FROM pf1_used_data;
 """
 
 if sys.argv[1] == "udf":
-    s = time.time()
+    s = time.perf_counter()
     con.sql(sql1)
-    e = time.time()
+    e = time.perf_counter()
     t = e-s
     print(f"udf : {t}")
 else:
-    s = time.time()
+    s = time.perf_counter()
     con.sql(sql2)
-    e = time.time()
+    e = time.perf_counter()
     t = e-s
     print(f"origin : {t}")
 

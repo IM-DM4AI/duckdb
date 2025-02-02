@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 	DuckDB db("/root/workspace/duckdb/examples/embedded-c++/imbridge_test/db/db_tpcx_ai_sf10.db");
 	Connection con(db);
 	con.CreateVectorizedFunction<double, double, double>("udf", &udf_tmp, LogicalType::INVALID,
-	                                                      FunctionKind::PREDICTION, 4096);
+	                                                      FunctionKind::BATCH_PREDICTION, 4096);
 
 	con.Query("SET threads TO 1;");
 	string sql1 = R"(

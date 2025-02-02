@@ -3,9 +3,10 @@
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_search_path.hpp"
+#include "duckdb/common/error_data.hpp"
+#include "duckdb/common/exception/transaction_exception.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/http_state.hpp"
-#include "duckdb/common/error_data.hpp"
 #include "duckdb/common/progress_bar/progress_bar.hpp"
 #include "duckdb/common/serializer/buffered_file_writer.hpp"
 #include "duckdb/common/types/column/column_data_collection.hpp"
@@ -15,6 +16,7 @@
 #include "duckdb/main/appender.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/client_context_file_opener.hpp"
+#include "duckdb/main/client_context_state.hpp"
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/database_manager.hpp"
@@ -39,11 +41,9 @@
 #include "duckdb/planner/operator/logical_execute.hpp"
 #include "duckdb/planner/planner.hpp"
 #include "duckdb/planner/pragma_handler.hpp"
+#include "duckdb/storage/data_table.hpp"
 #include "duckdb/transaction/meta_transaction.hpp"
 #include "duckdb/transaction/transaction_manager.hpp"
-#include "duckdb/storage/data_table.hpp"
-#include "duckdb/common/exception/transaction_exception.hpp"
-#include "duckdb/main/client_context_state.hpp"
 
 namespace duckdb {
 
@@ -136,7 +136,7 @@ struct DebugClientContextState : public ClientContextState {
 #endif
 
 ClientContext::ClientContext(shared_ptr<DatabaseInstance> database)
-    : db(std::move(database)), interrupted(false), client_data(make_uniq<ClientData>(*this)), transaction(*this) {
+    : db(std::move(database)), interrupted(false), client_data(make_uniq<ClientData>(*this)), transaction(*this), num_of_async_tasks(0){
 #ifdef DEBUG
 	registered_state["debug_client_context_state"] = make_uniq<DebugClientContextState>();
 #endif
@@ -172,6 +172,16 @@ void ClientContext::ProcessError(ErrorData &error, const string &query) const {
 	} else if (!query.empty()) {
 		error.AddErrorLocation(query);
 	}
+}
+
+void ClientContext::ScheduleUDF(DataChunk &data, Vector &result) {
+	auto &db_inst = DatabaseInstance::GetDatabase(*this);
+	db_inst.ScheduleUDF(data, result, GetClientProperties());
+}
+
+void ClientContext::IMLaneResetCache() {
+	auto &db_inst = DatabaseInstance::GetDatabase(*this);
+	db_inst.IMLaneResetCache();
 }
 
 template <class T>

@@ -2,12 +2,14 @@
 
 #include "duckdb/catalog/catalog.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
+#include "duckdb/execution/index/index_type_set.hpp"
 #include "duckdb/execution/operator/helper/physical_set.hpp"
 #include "duckdb/function/cast/cast_function_set.hpp"
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/connection_manager.hpp"
+#include "duckdb/main/database_file_opener.hpp"
 #include "duckdb/main/database_manager.hpp"
 #include "duckdb/main/database_path_and_type.hpp"
 #include "duckdb/main/error_manager.hpp"
@@ -15,15 +17,14 @@
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/parser/parsed_data/attach_info.hpp"
+#include "duckdb/planner/collation_binding.hpp"
 #include "duckdb/planner/extension_callback.hpp"
 #include "duckdb/storage/object_cache.hpp"
 #include "duckdb/storage/standard_buffer_manager.hpp"
 #include "duckdb/storage/storage_extension.hpp"
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/transaction/transaction_manager.hpp"
-#include "duckdb/execution/index/index_type_set.hpp"
-#include "duckdb/main/database_file_opener.hpp"
-#include "duckdb/planner/collation_binding.hpp"
+#include "imlane/scheduler/scheduler.hpp"
 
 #ifndef DUCKDB_NO_THREADS
 #include "duckdb/common/thread.hpp"
@@ -65,6 +66,7 @@ DatabaseInstance::~DatabaseInstance() {
 	scheduler.reset();
 	db_manager.reset();
 	buffer_manager.reset();
+	imlane_scheduler.reset();
 	// finally, flush allocations and disable the background thread
 	if (Allocator::SupportsFlush()) {
 		Allocator::FlushAll();
@@ -225,6 +227,7 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 		buffer_manager = make_uniq<StandardBufferManager>(*this, config.options.temporary_directory);
 	}
 	scheduler = make_uniq<TaskScheduler>(*this);
+	imlane_scheduler = make_uniq<imbridge::IMLaneScheduler>(true, std::max(1, (int)config.options.maximum_threads));
 	object_cache = make_uniq<ObjectCache>();
 	connection_manager = make_uniq<ConnectionManager>();
 
@@ -257,6 +260,7 @@ void DatabaseInstance::Initialize(const char *database_path, DBConfig *user_conf
 	// only increase thread count after storage init because we get races on catalog otherwise
 	scheduler->SetThreads(config.options.maximum_threads, config.options.external_threads);
 	scheduler->RelaunchThreads();
+	imlane_scheduler->launch();
 }
 
 DuckDB::DuckDB(const char *path, DBConfig *new_config) : instance(make_shared_ptr<DatabaseInstance>()) {
@@ -401,6 +405,14 @@ idx_t DatabaseInstance::NumberOfThreads() {
 
 const unordered_map<string, ExtensionInfo> &DatabaseInstance::GetExtensions() {
 	return loaded_extensions_info;
+}
+
+void DatabaseInstance::ScheduleUDF(DataChunk &data, Vector &result, const ClientProperties &options) {
+	imlane_scheduler->schedule_udf(data, result, options);
+}
+
+void DatabaseInstance::IMLaneResetCache() {
+	imlane_scheduler->reset_cache();
 }
 
 void DatabaseInstance::AddExtensionInfo(const string &name, const ExtensionLoadedInfo &info) {

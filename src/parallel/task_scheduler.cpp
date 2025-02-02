@@ -2,7 +2,7 @@
 
 #include "duckdb/common/chrono.hpp"
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/ipc/shared_memory_manager.hpp"
+#include "imlane/ipc/shared_memory_manager.hpp"
 #include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
@@ -21,35 +21,12 @@ namespace duckdb {
 
 struct SchedulerThread {
 #ifndef DUCKDB_NO_THREADS
-	explicit SchedulerThread(unique_ptr<thread> thread_p, std::string thread_id)
-	    : thread_id(thread_id), internal_thread(std::move(thread_p)),
-	      shared_memory_manager(thread_id, duckdb::imbridge::ProcessKind::MANAGER) {
-		// sytem call the server process execute
-		std::string command = imbridge::START_SERVER_COMMAND + thread_id;
-		std::thread t([command]() { std::system(command.c_str()); });
-		t.detach();
-	}
-
-	std::string thread_id;
+	explicit SchedulerThread(unique_ptr<thread> thread_p)
+	    : internal_thread(std::move(thread_p)){}
 	unique_ptr<thread> internal_thread;
-	duckdb::imbridge::SharedMemoryManager shared_memory_manager;
 #endif
 };
 
-struct MainChannelThread {
-#ifndef DUCKDB_NO_THREADS
-	explicit MainChannelThread(std::string thread_id)
-	    : thread_id(thread_id), shared_memory_manager(thread_id, duckdb::imbridge::ProcessKind::MANAGER) {
-		// sytem call the server process execute
-		std::string command = imbridge::START_SERVER_COMMAND + thread_id;
-		std::thread t([command]() { std::system(command.c_str()); });
-		t.detach();
-	}
-
-	std::string thread_id;
-	duckdb::imbridge::SharedMemoryManager shared_memory_manager;
-#endif
-};
 
 #ifndef DUCKDB_NO_THREADS
 typedef duckdb_moodycamel::ConcurrentQueue<shared_ptr<Task>> concurrent_queue_t;
@@ -127,8 +104,6 @@ TaskScheduler::TaskScheduler(DatabaseInstance &db)
       allocator_background_threads(db.config.options.allocator_background_threads), requested_thread_count(0),
       current_thread_count(1) {
 	SetAllocatorBackgroundThreads(db.config.options.allocator_background_threads);
-	main_thread =
-	    duckdb::make_uniq<MainChannelThread>(duckdb::imbridge::thread_id_to_string(std::this_thread::get_id()));
 }
 
 TaskScheduler::~TaskScheduler() {
@@ -359,16 +334,14 @@ void TaskScheduler::RelaunchThreadsInternal(int32_t n) {
 			// launch a thread and assign it a cancellation marker
 			auto marker = unique_ptr<atomic<bool>>(new atomic<bool>(true));
 			unique_ptr<thread> worker_thread;
-			std::string sub_thread_id;
 			try {
 				worker_thread = make_uniq<thread>(ThreadExecuteTasks, this, marker.get());
-				sub_thread_id = imbridge::thread_id_to_string(worker_thread->get_id());
 			} catch (std::exception &ex) {
 				// thread constructor failed - this can happen when the system has too many threads allocated
 				// in this case we cannot allocate more threads - stop launching them
 				break;
 			}
-			auto thread_wrapper = make_uniq<SchedulerThread>(std::move(worker_thread), sub_thread_id);
+			auto thread_wrapper = make_uniq<SchedulerThread>(std::move(worker_thread));
 
 			threads.push_back(std::move(thread_wrapper));
 			markers.push_back(std::move(marker));

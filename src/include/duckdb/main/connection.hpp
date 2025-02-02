@@ -72,6 +72,7 @@ public:
 	//! Force parallel execution, even for smaller tables. Should only be used in testing.
 	DUCKDB_API void ForceParallelism();
 
+	DUCKDB_API void IMLaneResetCache();
 	//! Issues a query to the database and returns a QueryResult. This result can be either a StreamQueryResult or a
 	//! MaterializedQueryResult. The result can be stepped through with calls to Fetch(). Note that there can only be
 	//! one active StreamQueryResult per Connection object. Calling SendQuery() will invalidate any previously existing

@@ -3,36 +3,47 @@ import numpy as np
 import pandas as pd
 import onnxruntime as ort
 
+from threadpoolctl import threadpool_limits
+@threadpool_limits.wrap(limits=1)
+def process_table(table):
+    root_model_path = "/root/workspace/duckdb/examples/embedded-c++/imbridge_test/data/test_raven"
+    onnx_path = f'{root_model_path}/Hospital/hospital_mlp_pipeline.onnx'
+    core = 1
+    ortconfig = ort.SessionOptions()
+    ortconfig.inter_op_num_threads = core
+    ortconfig.intra_op_num_threads = core
+    hospital_onnx_session = ort.InferenceSession(onnx_path, sess_options=ortconfig)
+    hospital_label = hospital_onnx_session.get_outputs()[0]
+    numerical_columns = ['hematocrit', 'neutrophils', 'sodium', 'glucose', 'bloodureanitro', 'creatinine', 'bmi', 'pulse',
+                        'respiration', 'secondarydiagnosisnonicd9']
+    categorical_columns = ['rcount', 'gender', 'dialysisrenalendstage', 'asthma', 'irondef', 'pneum', 'substancedependence',
+                        'psychologicaldisordermajor', 'depress', 'psychother', 'fibrosisandother', 'malnutrition',
+                        'hemo']
+    hospital_input_columns = numerical_columns + categorical_columns
+    hospital_type_map = {
+        'int32': np.int64,
+        'int64': np.int64,
+        'float64': np.float32,
+        'object': str,
+    }
+
+    def udf_wrap(*args):
+        infer_batch = {
+            elem: args[i].to_numpy().astype(hospital_type_map[args[i].to_numpy().dtype.name]).reshape((-1, 1))
+            for i, elem in enumerate(hospital_input_columns)
+        }
+        outputs = hospital_onnx_session.run([hospital_label.name], infer_batch)
+        return outputs[0]
+    df = pd.DataFrame(udf_wrap(*table))
+    # print(len(df))
+    return pa.Table.from_pandas(df)
+
 
 class MyProcess:
     def __init__(self):
         # load model part
-        self.root_model_path = "/root/workspace/duckdb/examples/embedded-c++/imbridge_test/data/test_raven"
-        self.onnx_path = f'{self.root_model_path}/Hospital/hospital_mlp_pipeline.onnx'
-        ortconfig = ort.SessionOptions()
-        self.hospital_onnx_session = ort.InferenceSession(
-            self.onnx_path, sess_options=ortconfig)
-        self.hospital_label = self.hospital_onnx_session.get_outputs()[0]
-        numerical_columns = ['hematocrit', 'neutrophils', 'sodium', 'glucose', 'bloodureanitro', 'creatinine', 'bmi', 'pulse',
-                             'respiration', 'secondarydiagnosisnonicd9']
-        categorical_columns = ['rcount', 'gender', 'dialysisrenalendstage', 'asthma', 'irondef', 'pneum', 'substancedependence',
-                               'psychologicaldisordermajor', 'depress', 'psychother', 'fibrosisandother', 'malnutrition',
-                               'hemo']
-        self.hospital_input_columns = numerical_columns + categorical_columns
-        self.hospital_type_map = {
-            'int32': np.int64,
-            'int64': np.int64,
-            'float64': np.float32,
-            'object': str,
-        }
+        pass
 
     def process(self, table):
-        def udf_wrap(*args):
-            infer_batch = {
-                elem: args[i].to_numpy().astype(self.hospital_type_map[args[i].to_numpy().dtype.name]).reshape((-1, 1))
-                for i, elem in enumerate(self.hospital_input_columns)
-            }
-            outputs = self.hospital_onnx_session.run([self.hospital_label.name], infer_batch)
-            df = pd.DataFrame(outputs[0])
-            return pa.Table.from_pandas(df)
-        return udf_wrap(*table)
+        # print(table.num_rows)
+        return process_table(table)

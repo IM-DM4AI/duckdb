@@ -18,8 +18,8 @@ public:
 	~BatchController();
     void Initialize(Allocator &allocator, const vector<LogicalType> &types, idx_t capacity);
     void ResetBuffer();
-    void PushChunk(const DataChunk &other);
-    void PushChunk(const DataChunk &other, idx_t start_offset, idx_t count);
+    void PushChunk(ClientContext &context, const DataChunk &other);
+    void PushChunk(ClientContext &context, const DataChunk &other, idx_t start_offset, idx_t count);
     DataChunk & NextBatch(idx_t required);
     bool HasNext(idx_t required);
 public:
@@ -28,9 +28,11 @@ public:
     idx_t GetSize();
 public:
     // helper method for external projection state reset
-    void ExternalProjectionReset(DataChunk &input, ExpressionExecutor &executor);
+    void ExternalProjectionReset(ClientContext &context, DataChunk &input, ExpressionExecutor &executor);
     // helper method for batch adpater, keep the output batch size <= STANDARD_VECTOR_SIZE
     void BatchAdapting(DataChunk &input, DataChunk &output, idx_t start_offset, idx_t size=STANDARD_VECTOR_SIZE);
+    // async execute expression
+    unique_ptr<DataChunk> AsyncExecuteExpression(ClientContext &context, ExpressionExecutor &executor, unique_ptr<DataChunk> input, vector<LogicalType> return_types, idx_t buffer_size = STANDARD_VECTOR_SIZE);
 
 private:
     void InternalVecShift(Vector &vec, data_ptr_t data_view, idx_t offset);

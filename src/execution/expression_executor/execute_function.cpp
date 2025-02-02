@@ -1,6 +1,7 @@
 #include "duckdb/common/arrow/arrow_transform_util.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
+
 #include <iostream>
 
 namespace duckdb {
@@ -77,33 +78,11 @@ void ExpressionExecutor::Execute(const BoundFunctionExpression &expr, Expression
 	arguments.Verify();
 
 	D_ASSERT(expr.function.function);
-	if (expr.function.bridge_info && expr.function.bridge_info->kind == FunctionKind::PREDICTION) {
-		std::string shm_id = imbridge::thread_id_to_string(std::this_thread::get_id());
-		imbridge::SharedMemoryManager shm(shm_id, imbridge::ProcessKind::CLIENT);
-
-		auto table = imbridge::ConvertDataChunkToArrowTable(arguments, context->GetClientProperties());
-		imbridge::WriteArrowTableToSharedMemory(table, shm, imbridge::INPUT_TABLE);
-
-		shm.sem_server->post();
-		shm.sem_client->wait();
-
-		auto my_table = imbridge::ReadArrowTableFromSharedMemory(shm, imbridge::OUTPUT_TABLE);
-
-		shm.destroy_shared_memory_object<char>(imbridge::INPUT_TABLE);
-		shm.destroy_shared_memory_object<char>(imbridge::OUTPUT_TABLE);
-		int cols = my_table->num_columns(), rows = my_table->num_rows();
-		// std::vector<int64_t> res;
-		// for (int i = 0; i < my_table->num_columns(); i++) {
-		// 	std::shared_ptr<arrow::ChunkedArray> column = my_table->column(i);
-		// 	for (int chunk_idx = 0; chunk_idx < column->num_chunks(); chunk_idx++) {
-		// 		auto chunk = std::static_pointer_cast<arrow::Int32Array>(column->chunk(chunk_idx));
-		// 		for (int j = 0; j < chunk->length(); j++) {
-		// 			res.push_back(chunk->Value(j));
-		// 		}
-		// 	}
-		// }
-		// write result to datachunk
-		imbridge::ConvertArrowTableResultToVector(my_table, result);
+	if (expr.function.bridge_info && (expr.function.bridge_info->kind == FunctionKind::BATCH_PREDICTION ||
+	                                  expr.function.bridge_info->kind == FunctionKind::ASYNC_PREDICTION ||
+	                                  expr.function.bridge_info->kind == FunctionKind::SCHEDULE_PREDICTION || 
+									  expr.function.bridge_info->kind == FunctionKind::ASYNC_BATCH_PREDICTION)) {
+		context->ScheduleUDF(arguments, result);
 	} else {
 		expr.function.function(arguments, *state, result);
 	}

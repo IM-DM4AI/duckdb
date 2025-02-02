@@ -5,8 +5,8 @@ import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 from catboost import CatBoostClassifier
+from threadpoolctl import threadpool_limits
 
-    
 class MyProcess:
     def __init__(self):
         # load model part
@@ -18,6 +18,8 @@ class MyProcess:
         self.model = CatBoostClassifier()
         self.model.load_model(model_path)
 
+    
+    @threadpool_limits.wrap(limits=1)
     def process(self, table):
         # print(table.num_rows)
         data = table.to_pandas().values

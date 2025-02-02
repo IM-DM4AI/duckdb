@@ -16,17 +16,20 @@ name = "pf8"
 
 
 con = duckdb.connect(
-    "/root/workspace/duckdb/examples/embedded-c++/imbridge_test/db/db_raven.db")
+    "/root/workspace/duckdb/examples/embedded-c++/imbridge_test/db/db_raven_10G.db")
 
 root_model_path = "/root/workspace/duckdb/examples/embedded-c++/imbridge_test/data/test_raven"
 
 
 scaler_path = f'{root_model_path}/Credit_Card/creditcard_standard_scale_model.pkl'
 model_path = f'{root_model_path}/Credit_Card/creditcard_catboost_gb.cbm'
+s1 = time.perf_counter()
 with open(scaler_path, 'rb') as f:
     scaler = pickle.load(f)
 model = CatBoostClassifier()
 model.load_model(model_path)
+e1 = time.perf_counter()
+model_load_time = e1-s1
 
 
 
@@ -50,11 +53,12 @@ max1 = 0
 res = 0
 flag = True
 for i in tqdm(range(times)):
-    s = time.time()
+    s = time.perf_counter()
     res_data = con.sql(sql).fetch_arrow_table()
     udf(*res_data)
-    e = time.time()
-    t = e-s
+    e = time.perf_counter()
+    t = e-s+model_load_time
+    print(f"{i+1} : {t}")
     res = res + t
     if flag:
         flag = False
@@ -63,7 +67,8 @@ for i in tqdm(range(times)):
     else:
         min1 = t if min1 > t else min1
         max1 = t if max1 < t else max1
-
+print(f"min : {min1}")
+print(f"max : {max1}")
 res = res - min1 - max1
 times = times - 2
 print(f"{name}, {res/times}s ")

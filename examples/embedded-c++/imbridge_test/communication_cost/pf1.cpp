@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
 	con.CreateVectorizedFunction<int64_t, double, double, double, double, double, double, double, double, string_t,
 	                             string_t, int64_t, bool, int64_t, int64_t, string_t, string_t, string_t, string_t,
 	                             string_t, string_t, string_t, int64_t, int64_t, int64_t, int64_t, int64_t, bool, bool>(
-	    "udf", &udf_tmp, LogicalType::INVALID, FunctionKind::PREDICTION, 4096);
+	    "udf", &udf_tmp, LogicalType::INVALID, FunctionKind::BATCH_PREDICTION, 4096);
 	con.Query("SET threads TO 1;");
 	string sql1 = R"(
 explain analyze SELECT udf(prop_location_score1, prop_location_score2, prop_log_historical_price, price_usd,

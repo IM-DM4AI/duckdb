@@ -23,7 +23,6 @@ class DatabaseInstance;
 class TaskScheduler;
 
 struct SchedulerThread;
-struct MainChannelThread;
 
 struct ProducerToken {
 	ProducerToken(TaskScheduler &scheduler, unique_ptr<QueueProducerToken> token);
@@ -93,8 +92,6 @@ private:
 	vector<unique_ptr<SchedulerThread>> threads;
 	//! Markers used by the various threads, if the markers are set to "false" the thread execution is stopped
 	vector<unique_ptr<atomic<bool>>> markers;
-	//! Main thread shared memory channel
-	unique_ptr<MainChannelThread> main_thread;
 	//! The threshold after which to flush the allocator after completing a task
 	atomic<idx_t> allocator_flush_threshold;
 	//! Whether allocator background threads are enabled

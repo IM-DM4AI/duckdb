@@ -91,6 +91,10 @@ unique_ptr<MaterializedQueryResult> Connection::Query(const string &query) {
 	return unique_ptr_cast<QueryResult, MaterializedQueryResult>(std::move(result));
 }
 
+void Connection::IMLaneResetCache() {
+	context->IMLaneResetCache();
+}
+
 DUCKDB_API string Connection::GetSubstrait(const string &query) {
 	vector<Value> params;
 	params.emplace_back(query);

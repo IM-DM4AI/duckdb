@@ -23,10 +23,10 @@ static void udf_tmp(DataChunk &input, ExpressionState &state, Vector &result) {
 }
 
 int main() {
-	DuckDB db("/root/workspace/duckdb/examples/embedded-c++/imbridge_test/db/db_tpcx_ai_sf10.db");
+	DuckDB db("/root/workspace/duckdb/examples/embedded-c++/imbridge_test/db/db_tpcx_ai_sf40.db");
 	Connection con(db);
 	con.CreateVectorizedFunction<int64_t, double, double, double, double, double, double, double>(
-	    "udf", &udf_tmp, LogicalType::INVALID, FunctionKind::PREDICTION, 4096);
+	    "udf", &udf_tmp, LogicalType::INVALID, FunctionKind::SCHEDULE_PREDICTION, 4096);
 
 	string sql = R"(
 explain analyze select serial_number, udf(smart_5_raw, smart_10_raw, smart_184_raw, smart_187_raw, smart_188_raw, smart_197_raw, smart_198_raw) 
@@ -38,11 +38,12 @@ from Failures;
 	bool flag = true;
 	for (int i = 0; i < times; i++) {
 		printf("step times %d \n", i);
-		clock_t start_time = clock();
+		auto start_time = std::chrono::high_resolution_clock::now();
 		con.Query(sql);
-		clock_t end_time = clock();
-		double t = (double)(end_time - start_time) / CLOCKS_PER_SEC;
-		printf("t%d :  %lf s!\n", i, t);
+		auto end_time = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
+		double t = duration / 1e6;
+		printf("%d : %lf\n", i + 1, t);
 		result += t;
 		if (flag) {
 			flag = false;
@@ -52,7 +53,10 @@ from Failures;
 			min1 = std::min(min1, t);
 			max1 = std::max(max1, t);
 		}
+		con.IMLaneResetCache();
 	}
+	printf("min : %lf\n", min1);
+	printf("max : %lf\n", max1);
 	result = result - min1 - max1;
 	times = times - 2;
 	printf("finished execute %lf s!\n", result / (times * 1.0));

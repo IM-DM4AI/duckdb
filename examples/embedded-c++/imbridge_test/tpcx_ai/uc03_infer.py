@@ -14,7 +14,7 @@ from tqdm import tqdm
 # hand_type = "udf"
 hand_type = "special"
 name = "uc03"
-scale = 10
+scale = 40
 
 con = duckdb.connect(
     f"/root/workspace/duckdb/examples/embedded-c++/imbridge_test/db/db_tpcx_ai_sf{scale}.db")
@@ -104,11 +104,12 @@ max1=0
 res=0
 flag=True
 for i in tqdm(range(times)):
-    s=time.time()
+    s=time.perf_counter()
     res_data=con.sql(sql).fetch_arrow_table()
     udf(*res_data)
-    e=time.time()
+    e=time.perf_counter()
     t=e-s
+    print(f"{i+1} : {t}")
     res=res + t
     if flag:
         flag=False
@@ -117,7 +118,8 @@ for i in tqdm(range(times)):
     else:
         min1=t if min1 > t else min1
         max1=t if max1 < t else max1
-
+print(f"min : {min1}")
+print(f"max : {max1}")
 res=res - min1 - max1
 times=times - 2
 print(f"{name}, {res/times}s ")
