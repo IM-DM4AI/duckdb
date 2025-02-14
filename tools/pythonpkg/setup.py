@@ -169,9 +169,9 @@ if os.name == 'nt':
     toolchain_args = ['/wd4244', '/wd4267', '/wd4200', '/wd26451', '/wd26495', '/D_CRT_SECURE_NO_WARNINGS', '/utf-8']
 else:
     # macos/linux
-    toolchain_args = ['-std=c++11', '-g0']
+    toolchain_args = ['-std=c++17', '-g0']
     if 'DUCKDEBUG' in os.environ:
-        toolchain_args = ['-std=c++11', '-Wall', '-O0', '-g']
+        toolchain_args = ['-std=c++17', '-Wall', '-O0', '-g']
 if 'DUCKDB_INSTALL_USER' in os.environ and 'install' in sys.argv:
     sys.argv.append('--user')
 
@@ -180,7 +180,7 @@ libraries = []
 if 'DUCKDB_BINARY_DIR' in os.environ:
     existing_duckdb_dir = os.environ['DUCKDB_BINARY_DIR']
 if 'DUCKDB_COMPILE_FLAGS' in os.environ:
-    toolchain_args = ['-std=c++11'] + os.environ['DUCKDB_COMPILE_FLAGS'].split()
+    toolchain_args = ['-std=c++17'] + os.environ['DUCKDB_COMPILE_FLAGS'].split()
 if 'DUCKDB_LIBS' in os.environ:
     libraries = os.environ['DUCKDB_LIBS'].split(' ')
 
@@ -317,8 +317,17 @@ else:
 
     result_libraries = package_build.get_libraries(existing_duckdb_dir, libraries, extensions)
     library_dirs = [x[0] for x in result_libraries if x[0] is not None]
-    libnames = [x[1] for x in result_libraries if x[1] is not None]
-
+    libnames = [x[1] for x in result_libraries if x[1] is not None and x[1] != 'Arrow::arrow_shared']
+    library_dirs.append("/usr/local/lib")
+    library_dirs.append("/lib/x86_64-linux-gnu")
+    libnames.append("arrow")
+    libnames.append("rt")
+    # print(result_libraries)
+    # print(libnames)
+    # exit(0)
+    # print(f"library_dirs__________________________________________________________________________{library_dirs}")
+    # print(f"libnames__________________________________________________________________________{libnames}")
+    # exit(0)
     libduckdb = Extension(
         lib_name + '.duckdb',
         include_dirs=include_directories,

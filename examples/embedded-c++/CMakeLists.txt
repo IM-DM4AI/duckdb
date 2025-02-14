@@ -12,6 +12,7 @@ include_directories(../../src/include)
 include_directories(${PYTHON_INCLUDE_DIRS} )
 include_directories(${ARROW_PYTHON_INCLUDE_DIR})
 link_directories(../../build/src)
+link_directories(../../build/release/src)
 link_directories(${ARROW_PYTHON_LIB_DIR})
 link_directories(${PYTHON_LIBRARIES})
 

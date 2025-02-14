@@ -100,12 +100,12 @@ else()
       duckdb_yyjson)
 
   add_library(duckdb SHARED ${ALL_OBJECT_FILES})
-  target_link_libraries(duckdb ${DUCKDB_LINK_LIBS} Arrow::arrow_shared ${Arrow_LIBRARIES} ${Boost_LIBRARIES})
+  target_link_libraries(duckdb ${DUCKDB_LINK_LIBS} Arrow::arrow_shared rt)
   link_threads(duckdb)
   link_extension_libraries(duckdb)
 
   add_library(duckdb_static STATIC ${ALL_OBJECT_FILES})
-  target_link_libraries(duckdb_static ${DUCKDB_LINK_LIBS} Arrow::arrow_shared ${Arrow_LIBRARIES} ${Boost_LIBRARIES})
+  target_link_libraries(duckdb_static ${DUCKDB_LINK_LIBS} Arrow::arrow_static rt)
   link_threads(duckdb_static)
   link_extension_libraries(duckdb_static)
 

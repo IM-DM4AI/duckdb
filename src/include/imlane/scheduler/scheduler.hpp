@@ -24,7 +24,7 @@ namespace bi = boost::interprocess;
 namespace duckdb {
 namespace imbridge {
 
-// use for udf server execute
+// [STATE] use for udf server execute
 const int TASK_UDF_INFER = 106;
 const int TASK_DESTROY = 107;
 const int TASK_RESET_CACHE = 108;
