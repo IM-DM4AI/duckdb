@@ -18,7 +18,10 @@ void DuckDBPyFunctional::Initialize(py::module_ &parent) {
 
 	py::enum_<duckdb::PythonUDFKind>(m, "PythonUDFKind")
 		.value("COMMON", duckdb::PythonUDFKind::COMMON)
-		.value("PREDICTION", duckdb::PythonUDFKind::PREDICTION)
+		.value("BATCH_PREDICTION", duckdb::PythonUDFKind::BATCH_PREDICTION)
+		.value("ASYNC_PREDICTION", duckdb::PythonUDFKind::ASYNC_PREDICTION)
+		.value("SCHEDULE_PREDICTION", duckdb::PythonUDFKind::SCHEDULE_PREDICTION)
+		.value("ASYNC_BATCH_PREDICTION", duckdb::PythonUDFKind::ASYNC_BATCH_PREDICTION)
 		.export_values();
 }
 
