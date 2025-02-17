@@ -49,13 +49,13 @@ endif()
 if(AMALGAMATION_BUILD)
 
   add_library(duckdb SHARED "${PROJECT_SOURCE_DIR}/src/amalgamation/duckdb.cpp")
-  target_link_libraries(duckdb ${DUCKDB_SYSTEM_LIBS} Arrow::arrow_shared ${Arrow_LIBRARIES} ${Boost_LIBRARIES})
+  target_link_libraries(duckdb ${DUCKDB_SYSTEM_LIBS} Arrow::arrow_shared rt)
   link_threads(duckdb)
   link_extension_libraries(duckdb)
 
   add_library(duckdb_static STATIC
               "${PROJECT_SOURCE_DIR}/src/amalgamation/duckdb.cpp")
-  target_link_libraries(duckdb_static ${DUCKDB_SYSTEM_LIBS} Arrow::arrow_shared ${Arrow_LIBRARIES} ${Boost_LIBRARIES})
+  target_link_libraries(duckdb_static ${DUCKDB_SYSTEM_LIBS} Arrow::arrow_static rt)
   link_threads(duckdb_static)
   link_extension_libraries(duckdb_static)
 
