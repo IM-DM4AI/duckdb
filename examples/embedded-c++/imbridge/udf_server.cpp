@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
 	imbridge::SharedMemoryManager shm_server(channel_name, imbridge::ProcessKind::MANAGER);
 
 	// prepare the environment
-	std::ifstream file("/root/workspace/duckdb/examples/embedded-c++/imbridge/code.py");
+	std::ifstream file("/home/duckdb/examples/embedded-c++/imbridge/code.py");
 	std::stringstream buffer;
 	buffer << file.rdbuf();
 	std::string python_code = buffer.str();

@@ -38,7 +38,7 @@ const std::string PRE_FIX = "imlane_";
 const std::string TASK_QUEUE_NAME = PRE_FIX + "task_queue";
 const std::string AVALIABLE_QUEUE_NAME = PRE_FIX + "avaliable_queue";
 
-const std::string START_SERVER_COMMAND = "/root/workspace/duckdb/examples/embedded-c++/imbridge/server_start.sh  ";
+const std::string START_SERVER_COMMAND = "/home/duckdb/examples/embedded-c++/imbridge/server_start.sh  ";
 const int BASE_ID = 100000;
 
 class IMLaneScheduler {

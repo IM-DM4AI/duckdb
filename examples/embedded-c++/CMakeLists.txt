@@ -6,15 +6,18 @@ find_package(Arrow REQUIRED)
 
 execute_process(
   COMMAND "python" -c "import sysconfig; print(sysconfig.get_path('include'))"
-  OUTPUT_VARIABLE PYTHON_INCLUDE_DIRS
+  OUTPUT_VARIABLE PYTHON_INCLUDE_DIRS_TMP
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
-execute_process(
-  COMMAND "python" -c "import sysconfig; import os; import glob; library_path = sysconfig.get_config_var('LIBDIR'); print(glob.glob(os.path.join(library_path, 'libpython*.so'))[0])"
-  OUTPUT_VARIABLE PYTHON_LIBRARIES
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
+if(NOT ${PYTHON_INCLUDE_DIRS} STREQUAL ${PYTHON_INCLUDE_DIRS_TMP})
+  set(PYTHON_INCLUDE_DIRS ${PYTHON_INCLUDE_DIRS_TMP})
+  execute_process(
+    COMMAND python -c "import sysconfig; import os; import glob; library_path = sysconfig.get_config_var('LIBDIR'); print(glob.glob(os.path.join(library_path, 'libpython*.so'))[0])"
+    OUTPUT_VARIABLE PYTHON_LIBRARIES
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+endif()
 
 execute_process(
   COMMAND "python" -c "import pyarrow; print(pyarrow.get_include())"
