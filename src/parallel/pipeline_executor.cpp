@@ -113,6 +113,7 @@ SinkNextBatchType PipelineExecutor::NextBatch(duckdb::DataChunk &source_chunk) {
 	if (source_chunk.size() == 0) {
 		// set it to the maximum valid batch index value for the current pipeline
 		next_batch_index = max_batch_index;
+		return SinkNextBatchType::READY;
 	} else {
 		auto batch_index =
 		    pipeline.source->GetBatchIndex(context, source_chunk, *pipeline.source_state, *local_source_state);
