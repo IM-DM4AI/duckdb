@@ -39,7 +39,8 @@ public:
             }
             output_buffer->Initialize(Allocator::Get(context.client), output_types,  buffer_capacity);
 		}
-
+    bool initialized=false;
+    bool can_cache_chunk=false;
 	ExpressionExecutor executor;
 	unique_ptr<DataChunk> output_buffer;
 
@@ -48,6 +49,26 @@ public:
 		context.thread.profiler.Flush(op, executor, "prediction_projection", 0);
 	}
 };
+
+bool PhysicalPredictionProjection::CanCacheType(const LogicalType &type) {
+	switch (type.id()) {
+	case LogicalTypeId::LIST:
+	case LogicalTypeId::MAP:
+	case LogicalTypeId::ARRAY:
+		return false;
+	case LogicalTypeId::STRUCT: {
+		auto &entries = StructType::GetChildTypes(type);
+		for (auto &entry : entries) {
+			if (!CanCacheType(entry.second)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	default:
+		return true;
+	}
+}
 
 PhysicalPredictionProjection::PhysicalPredictionProjection(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list,
                                        idx_t estimated_cardinality, idx_t user_defined_size)
@@ -59,6 +80,13 @@ PhysicalPredictionProjection::PhysicalPredictionProjection(vector<LogicalType> t
         } else {
             this->user_defined_size = user_defined_size;
             use_adaptive_size = false;
+        }
+        caching_supported = true;
+        for (auto &col_type : types) {
+            if (!CanCacheType(col_type)) {
+                caching_supported = false;
+                break;
+            }
         }
 }
 
@@ -101,6 +129,14 @@ OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &conte
     auto &output_left = state.output_left;
     auto &base_offset = state.base_offset;
     idx_t &batch_size = state.prediction_size;
+    if (!state.initialized) {
+		state.initialized = true;
+		state.can_cache_chunk = caching_supported && PhysicalOperator::OperatorCachingAllowed(context);
+	}
+    if(!state.can_cache_chunk){
+        state.executor.Execute(input, chunk);
+        return OperatorResultType::NEED_MORE_INPUT;
+    }
 
     auto ret = OperatorResultType::HAVE_MORE_OUTPUT;
 
