@@ -243,6 +243,16 @@ PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 		return PipelineExecuteResult::NOT_FINISHED;
 	}
 
+	if(!done_flushing){
+		//for imbridge predict operator
+		auto flush_completed = TryFlushCachingOperators();
+		if (flush_completed) {
+			done_flushing = true;
+		} else {
+			return PipelineExecuteResult::INTERRUPTED;
+		}
+	}
+
 	return PushFinalize();
 }
 

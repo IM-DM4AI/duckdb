@@ -2,7 +2,9 @@
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
-
+#include <fstream>
+#include <string>
+#include <iostream>
 namespace duckdb {
 
 namespace imbridge {

@@ -136,9 +136,10 @@ bool PhysicalOperator::OperatorCachingAllowed(ExecutionContext &context) {
 		return false;
 	} else if (context.pipeline->GetSink()->RequiresBatchIndex()) {
 		return false;
-	} else if (context.pipeline->IsOrderDependent()) {
-		return false;
 	}
+	// } else if (context.pipeline->IsOrderDependent()) {
+	// 	return false;
+	// }
 
 	return true;
 }

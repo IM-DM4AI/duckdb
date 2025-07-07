@@ -4,7 +4,9 @@
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include <cstdio>
-
+#include <fstream>
+#include <string>
+#include <iostream>
 namespace duckdb {
 namespace imbridge {
 
@@ -21,12 +23,34 @@ public:
 	ExpressionExecutor executor;
 	SelectionVector sel;
     idx_t sel_capacity;
+    bool initialized=false;
+    bool can_cache_chunk=false;
 
 public:
 	void Finalize(const PhysicalOperator &op, ExecutionContext &context) override {
 		context.thread.profiler.Flush(op, executor, "prediction_filter", 0);
 	}
 };
+
+bool PhysicalPredictionFilter::CanCacheType(const LogicalType &type) {
+	switch (type.id()) {
+	case LogicalTypeId::LIST:
+	case LogicalTypeId::MAP:
+	case LogicalTypeId::ARRAY:
+		return false;
+	case LogicalTypeId::STRUCT: {
+		auto &entries = StructType::GetChildTypes(type);
+		for (auto &entry : entries) {
+			if (!CanCacheType(entry.second)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	default:
+		return true;
+	}
+}
 
 PhysicalPredictionFilter::PhysicalPredictionFilter(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list,
  idx_t estimated_cardinality, idx_t user_defined_size): PhysicalOperator(PhysicalOperatorType::PREDICTION_FILTER, std::move(types), estimated_cardinality) {
@@ -48,6 +72,14 @@ PhysicalPredictionFilter::PhysicalPredictionFilter(vector<LogicalType> types, ve
     } else {
         this->user_defined_size = user_defined_size;
         use_adaptive_size = false;
+    }
+
+    caching_supported = true;
+    for (auto &col_type : types) {
+        if (!CanCacheType(col_type)) {
+            caching_supported = false;
+            break;
+        }
     }
 }
 
@@ -101,6 +133,15 @@ OperatorResultType PhysicalPredictionFilter::Execute(ExecutionContext &context, 
     auto &output_left = state_p.output_left;
     auto &base_offset = state_p.base_offset;
     idx_t &batch_size = state_p.prediction_size;
+
+    if (!state_p.initialized) {
+		state_p.initialized = true;
+		state_p.can_cache_chunk = caching_supported && PhysicalOperator::OperatorCachingAllowed(context);
+	}
+    if(!state_p.can_cache_chunk){
+        state_p.executor.Execute(input, chunk);
+        return OperatorResultType::NEED_MORE_INPUT;
+    }
 
     auto ret = OperatorResultType::HAVE_MORE_OUTPUT;
 
