@@ -18,11 +18,13 @@ public:
 	vector<unique_ptr<Expression>> select_list;
 	idx_t user_defined_size;
 	bool use_adaptive_size;
+	bool caching_supported;
 
 public:
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;
 	OperatorResultType Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 	                           GlobalOperatorState &gstate, OperatorState &state) const override;
+	bool CanCacheType(const LogicalType &type);
 
 	template<typename RET_TYPE>
 	RET_TYPE NextEvalAdapt(OperatorState &state, idx_t batch_size, DataChunk &chunk, RET_TYPE ret_adapt, RET_TYPE no_adapt) const;
