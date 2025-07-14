@@ -72,6 +72,13 @@ void DataChunk::InitializeEmpty(vector<LogicalType>::const_iterator begin, vecto
 	}
 }
 
+void DataChunk::ResizeCache(Allocator &allocator, idx_t col_idx, idx_t new_size) {
+	D_ASSERT(col_idx < ColumnCount());
+	const LogicalType &type = data[col_idx].GetType();
+	VectorCache cache(allocator, type, new_size);
+	vector_caches[col_idx] = std::move(cache);
+}
+
 void DataChunk::Reset() {
 	if (data.empty() || vector_caches.empty()) {
 		return;

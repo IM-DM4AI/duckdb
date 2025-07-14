@@ -49,6 +49,8 @@ private:
     idx_t base_offset;
     idx_t high_offset;
     BatchControllerState state;
+
+    Allocator *allocator;
 };
 
 } // namespace imbridge

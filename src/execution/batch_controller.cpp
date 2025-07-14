@@ -166,6 +166,7 @@ namespace imbridge {
         base_offset = 0;
         high_offset = base_offset;
         state = BatchControllerState::EMPTY;
+        this->allocator = &allocator;
         store.Initialize(allocator, types, capacity);
         sliced.InitializeEmpty(types);
         sliced.capacity = capacity;
@@ -214,7 +215,7 @@ namespace imbridge {
             auto new_capacity = NextPowerOfTwo(new_offset);
             for (idx_t i = 0; i < store.ColumnCount(); i++) {
                 store.data[i].Resize(high_offset, new_capacity);
-
+                store.ResizeCache(*allocator, i, new_capacity);
 	            AssignSharedPointer(sliced.data[i].auxiliary, store.data[i].auxiliary);
             }
             store.capacity = new_capacity;
@@ -269,6 +270,7 @@ namespace imbridge {
             auto new_capacity = store.capacity;
             for (idx_t i = 0; i < input.ColumnCount(); i++) {
                 input.data[i].Resize(0, new_capacity);
+                input.ResizeCache(*allocator, i, new_capacity);
             }
             input.capacity = store.capacity;
 

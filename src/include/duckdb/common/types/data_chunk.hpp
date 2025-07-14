@@ -112,6 +112,9 @@ public:
 	                           vector<LogicalType>::const_iterator end, idx_t capacity = STANDARD_VECTOR_SIZE);
 	DUCKDB_API void Initialize(ClientContext &context, vector<LogicalType>::const_iterator begin,
 	                           vector<LogicalType>::const_iterator end, idx_t capacity = STANDARD_VECTOR_SIZE);
+	
+	//! IMBridge patch: enable batch size beyond STANDARD_VECTOR_SIZE.
+	void ResizeCache(Allocator &allocator, idx_t col_idx, idx_t new_size);
 
 	//! Append the other DataChunk to this one. The column count and types of
 	//! the two DataChunks have to match exactly. Throws an exception if there

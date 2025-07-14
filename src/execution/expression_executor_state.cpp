@@ -28,6 +28,7 @@ void ExpressionState::UpdateCapacity(idx_t capacity) {
 
         for (idx_t i = 0; i < intermediate_chunk.ColumnCount(); i++) {
 			intermediate_chunk.data[i].Resize(0, capacity);
+			intermediate_chunk.ResizeCache(GetAllocator(), i, capacity);
 		}
 		intermediate_chunk.SetCapacity(capacity);
 	}
