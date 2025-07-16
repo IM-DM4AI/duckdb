@@ -73,9 +73,9 @@ bool PhysicalPredictionProjection::CanCacheType(const LogicalType &type) {
 }
 
 PhysicalPredictionProjection::PhysicalPredictionProjection(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list,
-                                       idx_t estimated_cardinality, idx_t user_defined_size)
+                                       idx_t estimated_cardinality, idx_t user_defined_size, FunctionKind kind)
     : PhysicalOperator(PhysicalOperatorType::PREDICTION_PROJECTION, std::move(types), estimated_cardinality),
-      select_list(std::move(select_list)) {
+      select_list(std::move(select_list)),kind(kind) {
         if(user_defined_size <= 0) {
             this->user_defined_size = INITIAL_PREDICTION_SIZE;
             use_adaptive_size = true; 
@@ -229,6 +229,7 @@ string PhysicalPredictionProjection::ParamsToString() const {
 		extra_info += expr->GetName() + "\n";
 	}
     extra_info += use_adaptive_size? "adaptive": "prediction_size:" + std::to_string(user_defined_size) + "\n";
+    extra_info += "prediction kind: " + function_kind_to_string(kind) + "\n";
 	return extra_info;
 }
 

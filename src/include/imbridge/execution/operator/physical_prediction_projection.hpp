@@ -13,12 +13,13 @@ public:
 
 public:
 	PhysicalPredictionProjection(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list,
-	                   idx_t estimated_cardinality, idx_t user_defined_size = INITIAL_PREDICTION_SIZE);
+	                   idx_t estimated_cardinality, idx_t user_defined_size = INITIAL_PREDICTION_SIZE, FunctionKind kind = FunctionKind::PREDICTION);
 
 	vector<unique_ptr<Expression>> select_list;
 	idx_t user_defined_size;
 	bool use_adaptive_size;
 	bool caching_supported;
+	FunctionKind kind;
 
 public:
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;

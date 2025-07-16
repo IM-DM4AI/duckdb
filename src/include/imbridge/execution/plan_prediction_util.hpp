@@ -10,7 +10,7 @@
 
 namespace duckdb {
 
-enum class FunctionKind: u_int8_t {COMMON = 0, PREDICTION=1};
+enum class FunctionKind: u_int8_t {COMMON = 0, PREDICTION=1, PROCESS_PREDICTION=2, SCHEDULE_PREDICTION=3};
 
 #define DEFAULT_PREDICTION_BATCH_SIZE 2048U
 
@@ -24,6 +24,8 @@ struct IMBridgeExtraInfo
 
 namespace imbridge {
 
+std::string function_kind_to_string(FunctionKind kind);
+
 class PredictionFuncChecker {
 
 public:
@@ -35,9 +37,12 @@ public:
     // also collect the prediction function info.
     bool CheckExprs(std::function<bool(idx_t)> constraint);
 
+    bool IsPrediction(FunctionKind kind);
+
     vector<idx_t> user_batch_size_map;
     set<idx_t> root_idx_list;
     idx_t total_prediction_func_count;
+    FunctionKind kind;
 
 private:
 

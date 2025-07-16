@@ -43,7 +43,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAnyJoin &o
 		if(conditions.size() == 1) {
 			// only one expression, perform cross product join and add a prediction filter
 			auto prediction_filter =  make_uniq<PhysicalPredictionFilter>(op.types, std::move(conditions),
-			op.estimated_cardinality, prediction_size);
+			op.estimated_cardinality, prediction_size, func_checker.kind);
 			plan = make_uniq<PhysicalCrossProduct>(op.types, std::move(left), std::move(right), op.estimated_cardinality);
 			
 			prediction_filter->children.push_back(std::move(plan));
@@ -72,7 +72,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAnyJoin &o
 
 
 			auto lifted_filter = make_uniq<PhysicalPredictionFilter>(op.types, std::move(lifted_exprs),
-			op.estimated_cardinality, prediction_size);
+			op.estimated_cardinality, prediction_size, func_checker.kind);
 			lifted_filter->children.push_back(std::move(plan));
 			plan = std::move(lifted_filter);
 		}

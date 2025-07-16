@@ -13,13 +13,14 @@ public:
 
 public:
 	PhysicalPredictionFilter(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list,
-     idx_t estimated_cardinality, idx_t prediction_size);
+     idx_t estimated_cardinality, idx_t prediction_size, FunctionKind kind = FunctionKind::PREDICTION);
 
 	//! The filter expression
 	unique_ptr<Expression> expression;
     idx_t user_defined_size;
 	bool use_adaptive_size;
 	bool caching_supported;
+	FunctionKind kind;
 
 public:
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;

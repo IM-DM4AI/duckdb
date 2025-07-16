@@ -53,7 +53,7 @@ bool PhysicalPredictionFilter::CanCacheType(const LogicalType &type) {
 }
 
 PhysicalPredictionFilter::PhysicalPredictionFilter(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list,
- idx_t estimated_cardinality, idx_t user_defined_size): PhysicalOperator(PhysicalOperatorType::PREDICTION_FILTER, std::move(types), estimated_cardinality) {
+ idx_t estimated_cardinality, idx_t user_defined_size, FunctionKind kind): PhysicalOperator(PhysicalOperatorType::PREDICTION_FILTER, std::move(types), estimated_cardinality), kind(kind) {
 	D_ASSERT(select_list.size() > 0);
 	if (select_list.size() > 1) {
 		// create a big AND out of the expressions
@@ -275,6 +275,7 @@ string PhysicalPredictionFilter::ParamsToString() const {
     } else {
         result += "\nprediction size: adaptive\n";
     }
+    result += "prediction kind: " + function_kind_to_string(kind) + "\n";
     return result;
 }
 

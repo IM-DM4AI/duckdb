@@ -10,6 +10,8 @@ ARROW: PythonUDFType
 
 COMMON: PythonUDFKind
 PREDICTION: PythonUDFKind
+PROCESS_PREDICTION: PythonUDFKind
+SCHEDULE_PREDICTION: PythonUDFKind
 
 class FunctionNullHandling:
     DEFAULT: FunctionNullHandling
@@ -39,6 +41,8 @@ class PythonUDFType:
 class PythonUDFKind:
     COMMON: PythonUDFKind
     PREDICTION: PythonUDFKind
+    PROCESS_PREDICTION: PythonUDFKind
+    SCHEDULE_PREDICTION: PythonUDFKind
     def __int__(self) -> int: ...
     def __index__(self) -> int: ...
     @property

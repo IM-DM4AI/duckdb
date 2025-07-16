@@ -50,7 +50,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalProjection
 		auto prediction_size = func_checker.user_batch_size_map[root_idx];
 
 		auto prediction_projection =  make_uniq<PhysicalPredictionProjection>(op.types, std::move(op.expressions),
-		 op.estimated_cardinality, prediction_size);
+		 op.estimated_cardinality, prediction_size, func_checker.kind);
 		prediction_projection->children.push_back(std::move(plan));
 		return std::move(prediction_projection);
 	}

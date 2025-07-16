@@ -34,7 +34,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalFilter &op
 			if(op.expressions.size() == 1) {
 				// only one expression, just turn it into prediction filter
 				auto prediction_filter =  make_uniq<PhysicalPredictionFilter>(plan->types, std::move(op.expressions),
-				op.estimated_cardinality, prediction_size);
+				op.estimated_cardinality, prediction_size, func_checker.kind);
 				prediction_filter->children.push_back(std::move(plan));
 				plan = std::move(prediction_filter);
 			} else {
@@ -50,7 +50,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalFilter &op
 					}
 				}
 				auto lifted_filter = make_uniq<PhysicalPredictionFilter>(plan->types, std::move(lifted_exprs),
-				op.estimated_cardinality, prediction_size);
+				op.estimated_cardinality, prediction_size, func_checker.kind);
 				auto remained_filter = make_uniq<PhysicalFilter>(plan->types, std::move(remained_exprs), op.estimated_cardinality);
 
 				remained_filter->children.push_back(std::move(plan));
