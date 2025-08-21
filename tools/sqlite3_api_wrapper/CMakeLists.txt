@@ -20,7 +20,7 @@ set(SQLITE_API_WRAPPER_FILES shell_extension.cpp sqlite3_api_wrapper.cpp
                              ${ALL_OBJECT_FILES})
 
 add_library(sqlite3_api_wrapper_static STATIC ${SQLITE_API_WRAPPER_FILES})
-target_link_libraries(sqlite3_api_wrapper_static duckdb_static)
+target_link_libraries(sqlite3_api_wrapper_static duckdb_static ${IMLane_C_LIBRARIES})
 if(NOT AMALGAMATION_BUILD)
   target_link_libraries(sqlite3_api_wrapper_static duckdb_utf8proc)
 endif()

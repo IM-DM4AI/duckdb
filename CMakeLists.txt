@@ -47,6 +47,17 @@ else()
   endif()
 endif()
 
+set(CMAKE_PREFIX_PATH "/home/IMLane_main/dist/lib" ${CMAKE_PREFIX_PATH})
+
+# set(IMLANE_ARROW_PATH "/home/IMLane_main/third_party/arrow/dist")
+set(IMLANE_FMT_PATH "/home/IMLane_main/third_party/fmt/dist")
+
+find_package(IMLane REQUIRED)
+
+message(STATUS "IMLane Include Path: ${IMLane_INCLUDE_DIRS}" )
+message(STATUS "IMLane C Libraries: ${IMLane_C_LIBRARIES}" )
+message(STATUS "IMLane C STATIC Libraries: ${IMLane_C_STATIC_LIBRARIES}" )
+
 # Determine install paths
 # default to gnu standard installation directories (lib, bin, include)
 # https://cmake.org/cmake/help/latest/module/GNUInstallDirs.html
