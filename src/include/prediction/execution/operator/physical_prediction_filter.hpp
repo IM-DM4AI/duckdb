@@ -5,7 +5,7 @@
 
 namespace duckdb {
 
-namespace imbridge {
+namespace prediction {
 
 class PhysicalPredictionFilter : public PhysicalOperator {
 public:
@@ -22,8 +22,12 @@ public:
 	bool caching_supported;
 	FunctionKind kind;
 
+	PredictionGlobalState* pgstate;
+
 public:
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;
+	unique_ptr<GlobalOperatorState> GetGlobalOperatorState(ClientContext &context) const override;
+	
 	bool CanCacheType(const LogicalType &type);
 
 	template<typename RET_TYPE>
@@ -37,6 +41,10 @@ public:
 		return true;
 	}
 
+	~PhysicalPredictionFilter() {
+		delete pgstate;
+	}
+
 	OperatorFinalizeResultType FinalExecute(ExecutionContext &context, 
 	DataChunk &chunk, GlobalOperatorState &gstate, OperatorState &state) const final;
 
@@ -47,6 +55,6 @@ protected:
 	                                   GlobalOperatorState &gstate, OperatorState &state) const override;
 };
 
-} // namespace imbridge
+} // namespace prediction
 
 } // namespace duckdb

@@ -21,7 +21,7 @@
 #include "duckdb/main/table_description.hpp"
 #include "duckdb/parser/sql_statement.hpp"
 
-#include "imbridge/execution/plan_prediction_util.hpp"
+#include "prediction/plan_prediction_util.hpp"
 
 namespace duckdb {
 

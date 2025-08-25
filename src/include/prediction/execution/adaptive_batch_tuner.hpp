@@ -1,9 +1,9 @@
 #pragma once
-#include "imbridge/execution/plan_prediction_util.hpp"
+#include "prediction/plan_prediction_util.hpp"
 #include <chrono>
 
 namespace duckdb {
-namespace imbridge {
+namespace prediction {
 
 class AdaptiveBatchTuner {
 
@@ -30,6 +30,6 @@ private:
     bool stop;
 };
 
-} // namespace imbridge
+} // namespace prediction
     
 } // namespace duckdb

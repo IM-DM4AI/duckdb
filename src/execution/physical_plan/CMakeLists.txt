@@ -45,9 +45,12 @@ add_library_unity(
   plan_expression_get.cpp
   plan_recursive_cte.cpp
   plan_cte.cpp
-  # Handle the plan generation of IMBridge Prediction Operator.
+  # Handle the plan generation of Prediction Operator.
   plan_prediction_util.cpp
   )
+
+target_include_directories(duckdb_physical_plan PUBLIC ${IMLane_INCLUDE_DIRS})
+
 set(ALL_OBJECT_FILES
     ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:duckdb_physical_plan>
     PARENT_SCOPE)

@@ -22,7 +22,7 @@ class VectorCache;
 class Serializer;
 class Deserializer;
 
-namespace imbridge {
+namespace prediction {
 	class BatchController;
 }
 
@@ -46,7 +46,7 @@ namespace imbridge {
 */
 class DataChunk {
 
-friend class imbridge::BatchController;
+friend class prediction::BatchController;
 
 public:
 	//! Creates an empty DataChunk

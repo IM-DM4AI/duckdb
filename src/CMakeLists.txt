@@ -95,7 +95,7 @@ else()
       duckdb_yyjson)
 
   add_library(duckdb SHARED ${ALL_OBJECT_FILES})
-  target_link_libraries(duckdb ${DUCKDB_LINK_LIBS} ${IMLane_C_LIBRARIES})
+  target_link_libraries(duckdb ${DUCKDB_LINK_LIBS} ${IMLane_C_STATIC_LIBRARIES})
   link_threads(duckdb)
   link_extension_libraries(duckdb)
 
@@ -104,12 +104,12 @@ else()
   link_threads(duckdb_static)
   link_extension_libraries(duckdb_static)
 
-  target_include_directories(duckdb PRIVATE ${IMLane_INCLUDE_DIRS})
+  target_include_directories(duckdb PUBLIC ${IMLane_INCLUDE_DIRS})
   target_include_directories(
     duckdb PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
         
-  target_include_directories(duckdb_static PRIVATE ${IMLane_INCLUDE_DIRS})
+  target_include_directories(duckdb_static PUBLIC ${IMLane_INCLUDE_DIRS})
   target_include_directories(
     duckdb_static PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                          $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)

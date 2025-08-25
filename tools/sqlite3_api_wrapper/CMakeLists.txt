@@ -20,7 +20,7 @@ set(SQLITE_API_WRAPPER_FILES shell_extension.cpp sqlite3_api_wrapper.cpp
                              ${ALL_OBJECT_FILES})
 
 add_library(sqlite3_api_wrapper_static STATIC ${SQLITE_API_WRAPPER_FILES})
-target_link_libraries(sqlite3_api_wrapper_static duckdb_static ${IMLane_C_LIBRARIES})
+target_link_libraries(sqlite3_api_wrapper_static duckdb_static ${IMLane_C_STATIC_LIBRARIES})
 if(NOT AMALGAMATION_BUILD)
   target_link_libraries(sqlite3_api_wrapper_static duckdb_utf8proc)
 endif()
@@ -28,7 +28,7 @@ link_threads(sqlite3_api_wrapper_static)
 
 if(NOT WIN32 AND NOT ZOS)
   add_library(sqlite3_api_wrapper SHARED ${SQLITE_API_WRAPPER_FILES})
-  target_link_libraries(sqlite3_api_wrapper duckdb ${DUCKDB_EXTRA_LINK_FLAGS})
+  target_link_libraries(sqlite3_api_wrapper duckdb ${DUCKDB_EXTRA_LINK_FLAGS} ${IMLane_C_STATIC_LIBRARIES})
   link_threads(sqlite3_api_wrapper)
 endif()
 

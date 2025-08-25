@@ -8,12 +8,12 @@
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 
-#include "imbridge/execution/operator/physical_prediction_filter.hpp"
-#include "imbridge/execution/plan_prediction_util.hpp"
+#include "prediction/execution/operator/physical_prediction_filter.hpp"
+#include "prediction/plan_prediction_util.hpp"
 
 namespace duckdb {
 
-using namespace imbridge;
+using namespace prediction;
 
 unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalFilter &op) {
 	D_ASSERT(op.children.size() == 1);
@@ -22,7 +22,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalFilter &op
 		D_ASSERT(plan->types.size() > 0);
 		// create a filter if there is anything to filter
 
-		// IMBridge optimization: check the predicate expressions
+		// Prediction optimization: check the predicate expressions
 		// try to extract the prediction function within a predicate and lift it as a standalone physical filter
 		// Optimization condition： only one prediction function appears in "op.expressions" (children of the conjunction predicate)
 		PredictionFuncChecker func_checker(op.expressions);

@@ -24,7 +24,7 @@ class VectorStructBuffer;
 class VectorListBuffer;
 struct SelCache;
 
-namespace imbridge {
+namespace prediction {
 	class BatchController;
 }
 
@@ -94,7 +94,7 @@ class Vector {
 	friend class DataChunk;
 	friend class VectorCacheBuffer;
 
-	friend class imbridge::BatchController;
+	friend class prediction::BatchController;
 
 public:
 	//! Create a vector that references the other vector

@@ -17,7 +17,7 @@
 #include "duckdb/storage/statistics/base_statistics.hpp"
 #include "duckdb/common/optional_ptr.hpp"
 
-#include "imbridge/execution/plan_prediction_util.hpp"
+#include "prediction/plan_prediction_util.hpp"
 
 namespace duckdb {
 

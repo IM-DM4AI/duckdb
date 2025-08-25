@@ -18,7 +18,7 @@
 
 namespace duckdb {
 
-using namespace imbridge;
+using namespace prediction;
 
 bool ExtractNumericValue(Value val, int64_t &result) {
 	if (!val.type().IsIntegral()) {
@@ -197,10 +197,10 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::PlanComparisonJoin(LogicalCo
 
 	unique_ptr<PhysicalOperator> plan;
 
-	// TODO: May be we can perform IMBridge optimization in the Join conditions.
+	// TODO: May be we can perform Prediction optimization in the Join conditions.
 	// It is a rare case for prediction function as a join condition here, 
 	// since it is extracted as an arbitrary expression (non-join condition) while planning or optimization
-	// IMBridge optimization: check the join conditions
+	// Prediction optimization: check the join conditions
 	// try to extract the prediction function within a predicate and lift it as a standalone physical filter
 	// Optimization conditions： 
 	// 1. only one prediction function appears in "op.conditions" (children of the conjunction predicate)

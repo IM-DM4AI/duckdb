@@ -1,10 +1,10 @@
-#include "imbridge/execution/batch_controller.hpp"
+#include "prediction/execution/batch_controller.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/common/typedefs.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 
 namespace duckdb {
-namespace imbridge {
+namespace prediction {
 
     template <class T>
     static inline data_ptr_t TemplateShift(data_ptr_t ptr, idx_t offset) {
@@ -308,6 +308,6 @@ namespace imbridge {
         output.Slice(sel, size);
     }
 
-} // namespace imbridge
+} // namespace prediction
 
 } // namespace duckdb

@@ -1,13 +1,13 @@
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
-#include "imbridge/execution/operator/physical_prediction_projection.hpp"
+#include "prediction/execution/operator/physical_prediction_projection.hpp"
 #include "duckdb/execution/physical_plan_generator.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
-#include "imbridge/execution/plan_prediction_util.hpp"
+#include "prediction/plan_prediction_util.hpp"
 
 namespace duckdb {
 
-using namespace imbridge;
+using namespace prediction;
 
 unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalProjection &op) {
 	D_ASSERT(op.children.size() == 1);
@@ -40,7 +40,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalProjection
 		}
 	}
 	
-	// IMBridge optimization: check the expression list
+	// Prediction optimization: check the expression list
 	// try to extract prediction function and transform it as a standalone physical projection operator
 	// Optimization condition： only one prediction function appears in "op.expressions" 
 	PredictionFuncChecker func_checker(op.expressions);

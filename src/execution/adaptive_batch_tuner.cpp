@@ -1,9 +1,10 @@
-#include "imbridge/execution/adaptive_batch_tuner.hpp"
+#include "prediction/params.hpp"
+#include "prediction/execution/adaptive_batch_tuner.hpp"
 #include <chrono>
 
 namespace duckdb
 {
-    namespace imbridge
+    namespace prediction
     {
         static const idx_t default_stride = 256;
         static const double default_smooth_factor = 0.25;
@@ -60,6 +61,6 @@ namespace duckdb
             prediction_speed = current_speed;
         }
 
-    } // namespace imbridge
+    } // namespace prediction
     
 } // namespace duckdb

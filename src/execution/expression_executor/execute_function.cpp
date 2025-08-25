@@ -1,5 +1,7 @@
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "dbend/c/imlane_dbend.hpp"
+#include "prediction/datachunk_converter.hpp"
 
 namespace duckdb {
 
@@ -75,7 +77,18 @@ void ExpressionExecutor::Execute(const BoundFunctionExpression &expr, Expression
 	arguments.Verify();
 
 	D_ASSERT(expr.function.function);
-	expr.function.function(arguments, *state, result);
+	
+	if(pgstate != nullptr) {
+		if(pgstate->IMLaneOptimize()) {
+			auto lane_context = pgstate->lane_context;
+			D_ASSERT(lane_context != nullptr);
+			lane_context->ExecuteFunction(expr.function.name, arguments, result);
+		} else {
+			expr.function.function(arguments, *state, result);
+		}
+	} else {
+		expr.function.function(arguments, *state, result);
+	}
 
 	VerifyNullHandling(expr, arguments, result);
 	D_ASSERT(result.GetType() == expr.return_type);

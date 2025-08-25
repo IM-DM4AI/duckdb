@@ -14,6 +14,8 @@
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/main/client_context.hpp"
 
+#include "prediction/execution/exec_prediction_util.hpp"
+
 namespace duckdb {
 class Allocator;
 class ExecutionContext;
@@ -86,6 +88,8 @@ public:
 	}
 
 	DUCKDB_API vector<unique_ptr<ExpressionExecutorState>> &GetStates();
+
+	void SetPredictionGlobalState(prediction::PredictionGlobalState *state);
 
 protected:
 	void Initialize(const Expression &expr, ExpressionExecutorState &state, idx_t capacity = STANDARD_VECTOR_SIZE);
@@ -160,6 +164,9 @@ private:
 	optional_ptr<ClientContext> context;
 	//! The states of the expression executor; this holds any intermediates and temporary states of expressions
 	vector<unique_ptr<ExpressionExecutorState>> states;
+
+	//! Prediction state
+	prediction::PredictionGlobalState *pgstate;
 
 private:
 	// it is possible to create an expression executor without a ClientContext - but it should be avoided

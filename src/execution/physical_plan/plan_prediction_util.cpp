@@ -1,11 +1,11 @@
-#include "imbridge/execution/plan_prediction_util.hpp"
+#include "prediction/plan_prediction_util.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/function/scalar_function.hpp"
 
 namespace duckdb {
 
-namespace imbridge {
+namespace prediction {
 
 std::string function_kind_to_string(FunctionKind kind){
     switch(kind){
@@ -19,12 +19,14 @@ std::string function_kind_to_string(FunctionKind kind){
             return "SCHEDULE_PREDICTION";
     }
     return "NO PREDICTION";
-};
+}
 
 
 bool PredictionFuncChecker::IsPrediction(FunctionKind kind){
     bool res = false;
     switch(kind){
+        case FunctionKind::COMMON:
+            break;
         case FunctionKind::PREDICTION:
         case FunctionKind::PROCESS_PREDICTION:
         case FunctionKind::SCHEDULE_PREDICTION:
@@ -66,6 +68,6 @@ void PredictionFuncChecker::VisitExpressionChild(Expression &expr, idx_t root_id
     ExpressionIterator::EnumerateChildren(expr, [&](unique_ptr<Expression> &expr) { VisitExpression(&expr, root_idx); });
 }
 
-} // namespace imbridge
+} // namespace prediction
 
 } // namespace duckdb

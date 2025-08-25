@@ -23,7 +23,12 @@ add_library_unity(
   window_segment_tree.cpp
   batch_controller.cpp
   adaptive_batch_tuner.cpp
+
+  exec_prediction_util.cpp
   )
+
+target_include_directories(duckdb_execution PUBLIC ${IMLane_INCLUDE_DIRS})
+
 set(ALL_OBJECT_FILES
     ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:duckdb_execution>
     PARENT_SCOPE)

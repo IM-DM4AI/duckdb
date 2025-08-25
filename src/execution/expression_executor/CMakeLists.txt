@@ -11,6 +11,9 @@ add_library_unity(
   execute_operator.cpp
   execute_parameter.cpp
   execute_reference.cpp)
+
+target_include_directories(duckdb_expression_executor PUBLIC ${IMLane_INCLUDE_DIRS})  
+
 set(ALL_OBJECT_FILES
     ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:duckdb_expression_executor>
     PARENT_SCOPE)

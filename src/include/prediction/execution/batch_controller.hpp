@@ -8,7 +8,7 @@ namespace duckdb {
 
 class ExpressionExecutor;
 
-namespace imbridge {
+namespace prediction {
 
 enum class BatchControllerState: uint8_t { EMPTY, SLICING, BUFFERRING };
     
@@ -53,6 +53,6 @@ private:
     Allocator *allocator;
 };
 
-} // namespace imbridge
+} // namespace prediction
 
 } // namespace duckdb

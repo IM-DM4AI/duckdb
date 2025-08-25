@@ -1,5 +1,7 @@
+#include "prediction/execution/operator/physical_prediction_filter.hpp"
+#include "prediction/execution/exec_prediction_util.hpp"
+
 #include "duckdb/execution/physical_operator.hpp"
-#include "imbridge/execution/operator/physical_prediction_filter.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/parallel/thread_context.hpp"
@@ -7,17 +9,23 @@
 #include <fstream>
 #include <string>
 #include <iostream>
+
+#include "dbend/c/imlane_dbend.hpp"
+
 namespace duckdb {
-namespace imbridge {
+namespace prediction {
 
 class PredictionFilterState: public PredictionState {
 public:
-	explicit PredictionFilterState(ExecutionContext &context, Expression &expr,
+	explicit PredictionFilterState(ExecutionContext &context, 
+        PredictionGlobalState* pgstate,
+        Expression &expr,
     const vector<LogicalType> &input_types, idx_t prediction_size = INITIAL_PREDICTION_SIZE,
      bool adaptive = false, idx_t buffer_capacity = DEFAULT_RESERVED_CAPACITY)
-	    : PredictionState(context, input_types, expr, adaptive, prediction_size, buffer_capacity),
+	    : PredictionState(context, input_types, pgstate, expr, adaptive, prediction_size, buffer_capacity),
          executor(context.client, expr, buffer_capacity),
          sel(buffer_capacity), sel_capacity(buffer_capacity) {
+            executor.SetPredictionGlobalState(pgstate);
 	}
 
 	ExpressionExecutor executor;
@@ -81,10 +89,16 @@ PhysicalPredictionFilter::PhysicalPredictionFilter(vector<LogicalType> types, ve
             break;
         }
     }
+
+    pgstate = new PredictionGlobalState(kind);
 }
 
 unique_ptr<OperatorState> PhysicalPredictionFilter::GetOperatorState(ExecutionContext &context) const {
-	return make_uniq<PredictionFilterState>(context, *expression, children[0]->GetTypes(), user_defined_size, use_adaptive_size);
+	return make_uniq<PredictionFilterState>(context, pgstate,  *expression, children[0]->GetTypes(), user_defined_size, use_adaptive_size);
+}
+
+unique_ptr<GlobalOperatorState> PhysicalPredictionFilter::GetGlobalOperatorState(ClientContext &context) const {
+    return make_uniq<GlobalOperatorState>();
 }
 
 template<typename RET_TYPE>
@@ -127,6 +141,18 @@ RET_TYPE PhysicalPredictionFilter::NextEvalAdapt(OperatorState &state, idx_t bat
 OperatorResultType PhysicalPredictionFilter::Execute(ExecutionContext &context, DataChunk &input,
  DataChunk &chunk, GlobalOperatorState &gstate, OperatorState &state) const {
     auto &state_p = state.Cast<PredictionFilterState>();
+    
+    if(pgstate->IMLaneOptimize()) {
+        idx_t result_count = state_p.executor.SelectExpression(input, state_p.sel);
+        if (result_count == input.size()) {
+            // nothing was filtered: skip adding any selection vectors
+            chunk.Reference(input);
+        } else {
+            chunk.Slice(input, state_p.sel, result_count);
+        }
+        return OperatorResultType::NEED_MORE_INPUT;
+    }
+    
     auto &controller = state_p.controller;
     auto &sel = state_p.sel;
     auto &padded = state_p.padded;
@@ -139,7 +165,13 @@ OperatorResultType PhysicalPredictionFilter::Execute(ExecutionContext &context, 
 		state_p.can_cache_chunk = caching_supported && PhysicalOperator::OperatorCachingAllowed(context);
 	}
     if(!state_p.can_cache_chunk){
-        state_p.executor.Execute(input, chunk);
+        idx_t result_count = state_p.executor.SelectExpression(input, state_p.sel);
+        if (result_count == input.size()) {
+            // nothing was filtered: skip adding any selection vectors
+            chunk.Reference(input);
+        } else {
+            chunk.Slice(input, state_p.sel, result_count);
+        }
         return OperatorResultType::NEED_MORE_INPUT;
     }
 
@@ -225,6 +257,9 @@ OperatorResultType PhysicalPredictionFilter::Execute(ExecutionContext &context, 
 
 OperatorFinalizeResultType PhysicalPredictionFilter::FinalExecute(ExecutionContext &context,
  DataChunk &chunk, GlobalOperatorState &gstate, OperatorState &state) const {
+    if(pgstate->IMLaneOptimize()) {
+        return OperatorFinalizeResultType::FINISHED;
+    }
     auto &local = state.Cast<PredictionFilterState>();
     auto &controller = local.controller;
     auto &sel = local.sel;
@@ -279,7 +314,7 @@ string PhysicalPredictionFilter::ParamsToString() const {
     return result;
 }
 
-} // namespace imbridge
+} // namespace prediction
     
 
 } // namespace duckdb

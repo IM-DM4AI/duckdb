@@ -4,7 +4,7 @@
 #include <string>
 
 using namespace duckdb;
-using namespace imbridge;
+using namespace prediction;
 
 template <typename TYPE, int NUM_INPUT>
 static void udf_tmp(DataChunk &input, ExpressionState &state, Vector &result) {

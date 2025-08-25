@@ -16,7 +16,7 @@
 namespace duckdb {
 class VectorBuffer;
 
-namespace imbridge {
+namespace prediction {
 	class BatchController;
 }
 
@@ -28,7 +28,7 @@ struct SelectionData {
 
 struct SelectionVector {
 
-	friend class imbridge::BatchController;
+	friend class prediction::BatchController;
 
 	SelectionVector() : sel_vector(nullptr) {
 	}

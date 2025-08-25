@@ -121,7 +121,7 @@ enum class PhysicalOperatorType : uint8_t {
 	CREATE_SECRET,
 
 	// -----------------------------
-	// Prediction Operator (IMBridge Optimization)
+	// Prediction Operator 
 	// -----------------------------
 	PREDICTION_FILTER,
 	PREDICTION_PROJECTION

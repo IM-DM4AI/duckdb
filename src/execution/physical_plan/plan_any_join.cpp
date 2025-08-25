@@ -2,8 +2,8 @@
 #include "duckdb/execution/physical_plan_generator.hpp"
 #include "duckdb/planner/operator/logical_any_join.hpp"
 
-#include "imbridge/execution/operator/physical_prediction_filter.hpp"
-#include "imbridge/execution/plan_prediction_util.hpp"
+#include "prediction/execution/operator/physical_prediction_filter.hpp"
+#include "prediction/plan_prediction_util.hpp"
 #include "duckdb/execution/operator/filter/physical_filter.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/execution/operator/join/physical_cross_product.hpp"
@@ -11,7 +11,7 @@
 
 namespace duckdb {
 
-using namespace imbridge;
+using namespace prediction;
 
 unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAnyJoin &op) {
 	// first visit the child nodes
@@ -24,7 +24,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalAnyJoin &o
 	unique_ptr<PhysicalOperator> plan;
 
 
-	// IMBridge optimization: check the join condition
+	// Prediction optimization: check the join condition
 	// try to extract the prediction function within a predicate and lift it as a standalone physical filter
 	// Optimization conditions： 
 	// 1. only one prediction function appears in "op.condition" (split into children of the conjunction predicates)

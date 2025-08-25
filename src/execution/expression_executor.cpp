@@ -7,7 +7,7 @@
 
 namespace duckdb {
 
-ExpressionExecutor::ExpressionExecutor(ClientContext &context) : context(&context) {
+ExpressionExecutor::ExpressionExecutor(ClientContext &context) : context(&context), pgstate(nullptr) {
 }
 
 ExpressionExecutor::ExpressionExecutor(ClientContext &context, const Expression *expression)
@@ -42,7 +42,7 @@ ExpressionExecutor::ExpressionExecutor(ClientContext &context, const vector<uniq
 	}
 }
 
-ExpressionExecutor::ExpressionExecutor(const vector<unique_ptr<Expression>> &exprs) : context(nullptr) {
+ExpressionExecutor::ExpressionExecutor(const vector<unique_ptr<Expression>> &exprs) : context(nullptr), pgstate(nullptr) {
 	D_ASSERT(exprs.size() > 0);
 	for (auto &expr : exprs) {
 		AddExpression(*expr);
@@ -322,6 +322,10 @@ idx_t ExpressionExecutor::DefaultSelect(const Expression &expr, ExpressionState 
 
 vector<unique_ptr<ExpressionExecutorState>> &ExpressionExecutor::GetStates() {
 	return states;
+}
+
+void ExpressionExecutor::SetPredictionGlobalState(prediction::PredictionGlobalState *state) {
+	pgstate = state;
 }
 
 } // namespace duckdb
