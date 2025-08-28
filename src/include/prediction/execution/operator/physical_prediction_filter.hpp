@@ -24,6 +24,18 @@ public:
 
 	PredictionGlobalState* pgstate;
 
+	std::function<OperatorResultType(ExecutionContext&, DataChunk&,
+		DataChunk&, GlobalOperatorState&, OperatorState&)> exec_func;
+
+   OperatorResultType BatchingExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+		   GlobalOperatorState &gstate, OperatorState &state) const;
+   
+   OperatorResultType ProcessExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+		   GlobalOperatorState &gstate, OperatorState &state) const;
+
+   OperatorResultType ProcessSchedExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+		   GlobalOperatorState &gstate, OperatorState &state) const;
+
 public:
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;
 	unique_ptr<GlobalOperatorState> GetGlobalOperatorState(ClientContext &context) const override;

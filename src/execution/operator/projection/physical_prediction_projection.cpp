@@ -95,6 +95,18 @@ PhysicalPredictionProjection::PhysicalPredictionProjection(vector<LogicalType> t
             use_adaptive_size = false;
         }
 
+        if(pgstate->IMLaneOptimize()) {
+            exec_func = std::bind(&PhysicalPredictionProjection::ProcessExec, this, 
+            std::placeholders::_1, std::placeholders::_2,
+            std::placeholders::_3, std::placeholders::_4,
+            std::placeholders::_5);
+        } else {
+            exec_func = std::bind(&PhysicalPredictionProjection::BatchingExec, this, 
+                std::placeholders::_1, std::placeholders::_2,
+                std::placeholders::_3, std::placeholders::_4,
+                std::placeholders::_5);
+        }
+
         caching_supported = true;
         for (auto &col_type : types) {
             if (!CanCacheType(col_type)) {
@@ -134,14 +146,10 @@ RET_TYPE PhysicalPredictionProjection::NextEvalAdapt(OperatorState &state, idx_t
     return ret;
 }
 
-OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
-                                               GlobalOperatorState &gstate, OperatorState &state_p) const {
-	auto &state = state_p.Cast<PredictionProjectionState>();
+OperatorResultType PhysicalPredictionProjection::BatchingExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+    GlobalOperatorState &gstate, OperatorState &state_p) const {
+        auto &state = state_p.Cast<PredictionProjectionState>();
 
-    if(pgstate->IMLaneOptimize()) {
-        state.executor.Execute(input, chunk);
-        return OperatorResultType::NEED_MORE_INPUT;
-    } else {
         auto &controller = state.controller;
         auto &out_buf = state.output_buffer;
         auto &padded = state.padded;
@@ -156,9 +164,9 @@ OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &conte
             state.executor.Execute(input, chunk);
             return OperatorResultType::NEED_MORE_INPUT;
         }
-    
+
         auto ret = OperatorResultType::HAVE_MORE_OUTPUT;
-    
+
         // batch adapting
         if (output_left) {
             if (output_left <= STANDARD_VECTOR_SIZE) {
@@ -170,16 +178,16 @@ OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &conte
                 output_left -= STANDARD_VECTOR_SIZE;
                 base_offset += STANDARD_VECTOR_SIZE;
             }
-    
+
             return ret;
         }
-    
+
         switch (controller->GetState()) {
         case BatchControllerState::SLICING: {
             batch_size = state.tuner.GetBatchSize();
             if (controller->HasNext(batch_size)) {
                 ret = NextEvalAdapt(state, batch_size, chunk,
-                 OperatorResultType::HAVE_MORE_OUTPUT, OperatorResultType::HAVE_MORE_OUTPUT);
+                OperatorResultType::HAVE_MORE_OUTPUT, OperatorResultType::HAVE_MORE_OUTPUT);
             } else {
                 // check wheather the buffer should be reset
                 if (controller->GetSize() == 0) {
@@ -197,7 +205,7 @@ OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &conte
             controller->ResetBuffer();
             idx_t remained = input.size() - padded;
             ret = OperatorResultType::NEED_MORE_INPUT;
-    
+
             if (remained > 0) {
                 controller->PushChunk(input, padded, input.size());
                 if (remained < batch_size) {
@@ -213,7 +221,7 @@ OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &conte
         }
         case BatchControllerState::BUFFERRING: {
             batch_size = state.tuner.GetBatchSize();
-    
+
             if (controller->GetSize() + input.size() < batch_size) {
                 controller->PushChunk(input);
                 controller->SetState(BatchControllerState::BUFFERRING);
@@ -222,7 +230,7 @@ OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &conte
                 padded = batch_size - controller->GetSize();
                 controller->PushChunk(input, 0, padded);
                 ret = NextEvalAdapt(state, batch_size, chunk,
-                 OperatorResultType::HAVE_MORE_OUTPUT, OperatorResultType::HAVE_MORE_OUTPUT);
+                OperatorResultType::HAVE_MORE_OUTPUT, OperatorResultType::HAVE_MORE_OUTPUT);
                 controller->SetState(BatchControllerState::EMPTY);
             }  
             break;
@@ -231,9 +239,25 @@ OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &conte
         default:
             throw InternalException("BatchController State Unsupported");
         }
-    
+
         return ret;
-    }
+}
+
+OperatorResultType PhysicalPredictionProjection::ProcessExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+    GlobalOperatorState &gstate, OperatorState &state_p) const {
+        auto &state = state_p.Cast<PredictionProjectionState>();
+        state.executor.Execute(input, chunk);
+        return OperatorResultType::NEED_MORE_INPUT;
+}
+
+OperatorResultType PhysicalPredictionProjection::ProcessSchedExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+    GlobalOperatorState &gstate, OperatorState &state_p) const {
+    return OperatorResultType::FINISHED;
+}
+
+OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+                                               GlobalOperatorState &gstate, OperatorState &state_p) const {
+    return exec_func(context, input, chunk, gstate, state_p);
 }
 
 unique_ptr<OperatorState> PhysicalPredictionProjection::GetOperatorState(ExecutionContext &context) const {

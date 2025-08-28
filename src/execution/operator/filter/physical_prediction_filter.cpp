@@ -82,6 +82,18 @@ PhysicalPredictionFilter::PhysicalPredictionFilter(vector<LogicalType> types, ve
         use_adaptive_size = false;
     }
 
+    if(pgstate->IMLaneOptimize()) {
+        exec_func = std::bind(&PhysicalPredictionFilter::ProcessExec, this, 
+        std::placeholders::_1, std::placeholders::_2,
+        std::placeholders::_3, std::placeholders::_4,
+        std::placeholders::_5);
+    } else {
+        exec_func = std::bind(&PhysicalPredictionFilter::BatchingExec, this, 
+            std::placeholders::_1, std::placeholders::_2,
+            std::placeholders::_3, std::placeholders::_4,
+            std::placeholders::_5);
+    }
+
     caching_supported = true;
     for (auto &col_type : types) {
         if (!CanCacheType(col_type)) {
@@ -91,6 +103,131 @@ PhysicalPredictionFilter::PhysicalPredictionFilter(vector<LogicalType> types, ve
     }
 
     pgstate = new PredictionGlobalState(kind);
+}
+
+OperatorResultType PhysicalPredictionFilter::BatchingExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+    GlobalOperatorState &gstate, OperatorState &state) const {
+        auto &state_p = state.Cast<PredictionFilterState>();
+
+        auto &controller = state_p.controller;
+        auto &sel = state_p.sel;
+        auto &padded = state_p.padded;
+        auto &output_left = state_p.output_left;
+        auto &base_offset = state_p.base_offset;
+        idx_t &batch_size = state_p.prediction_size;
+    
+        if (!state_p.initialized) {
+            state_p.initialized = true;
+            state_p.can_cache_chunk = caching_supported && PhysicalOperator::OperatorCachingAllowed(context);
+        }
+        if(!state_p.can_cache_chunk){
+            idx_t result_count = state_p.executor.SelectExpression(input, state_p.sel);
+            if (result_count == input.size()) {
+                // nothing was filtered: skip adding any selection vectors
+                chunk.Reference(input);
+            } else {
+                chunk.Slice(input, state_p.sel, result_count);
+            }
+            return OperatorResultType::NEED_MORE_INPUT;
+        }
+    
+        auto ret = OperatorResultType::HAVE_MORE_OUTPUT;
+    
+        // batch adapting
+        if (output_left) {
+            if (output_left <= STANDARD_VECTOR_SIZE) {
+                controller->BatchAdapting(controller->CurrentBatch(), sel, chunk, base_offset, output_left);
+                output_left = 0;
+                base_offset = 0;
+            } else {
+                controller->BatchAdapting(controller->CurrentBatch(), sel, chunk, base_offset);
+                output_left -= STANDARD_VECTOR_SIZE;
+                base_offset += STANDARD_VECTOR_SIZE;
+            }
+    
+            return ret;
+        }
+    
+        switch (controller->GetState()) {
+            case BatchControllerState::SLICING: {
+                batch_size = state_p.tuner.GetBatchSize();
+                if (controller->HasNext(batch_size)) {
+                    ret = NextEvalAdapt(state, batch_size, chunk,
+                    OperatorResultType::HAVE_MORE_OUTPUT, OperatorResultType::HAVE_MORE_OUTPUT);
+                } else {
+                    // check wheather the buffer should be reset
+                    if (controller->GetSize() == 0) {
+                        // the buffer state is reset to EMPTY
+                        controller->ResetBuffer();
+                    } else {
+                        controller->SetState(BatchControllerState::BUFFERRING);
+                    }
+                    ret = OperatorResultType::NEED_MORE_INPUT;
+                }            
+                break;
+            }
+            case BatchControllerState::EMPTY: {
+                batch_size = state_p.tuner.GetBatchSize();
+                controller->ResetBuffer();
+                idx_t remained = input.size() - padded;
+                ret = OperatorResultType::NEED_MORE_INPUT;
+    
+                if (remained > 0) {
+                    controller->PushChunk(input, padded, input.size());
+                    if (remained < batch_size) {
+                        controller->SetState(BatchControllerState::BUFFERRING); 
+                    } else {
+                        // opt: perform slicing directly
+                        controller->SetState(BatchControllerState::SLICING);
+                        ret = OperatorResultType::HAVE_MORE_OUTPUT;
+                    }
+                }
+                padded = 0;
+                break;
+            }
+            case BatchControllerState::BUFFERRING: {
+                batch_size = state_p.tuner.GetBatchSize();
+    
+                if (controller->GetSize() + input.size() < batch_size) {
+                    controller->PushChunk(input);
+                    controller->SetState(BatchControllerState::BUFFERRING);
+                    ret = OperatorResultType::NEED_MORE_INPUT;
+                } else {
+                    padded = batch_size - controller->GetSize();
+                    controller->PushChunk(input, 0, padded);
+    
+                    ret = NextEvalAdapt(state, batch_size, chunk,
+                    OperatorResultType::HAVE_MORE_OUTPUT, OperatorResultType::HAVE_MORE_OUTPUT);
+    
+                    controller->SetState(BatchControllerState::EMPTY);
+                }  
+                break;
+            }
+    
+            default:
+                throw InternalException("BatchController State Unsupported");  
+        }
+    
+        return ret;
+}
+
+OperatorResultType PhysicalPredictionFilter::ProcessExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+    GlobalOperatorState &gstate, OperatorState &state) const {
+    auto &state_p = state.Cast<PredictionFilterState>();
+    
+    idx_t result_count = state_p.executor.SelectExpression(input, state_p.sel);
+    if (result_count == input.size()) {
+        // nothing was filtered: skip adding any selection vectors
+        chunk.Reference(input);
+    } else {
+        chunk.Slice(input, state_p.sel, result_count);
+    }
+    return OperatorResultType::NEED_MORE_INPUT;
+}
+
+OperatorResultType PhysicalPredictionFilter::ProcessSchedExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+    GlobalOperatorState &gstate, OperatorState &state) const {
+    return OperatorResultType::FINISHED;
 }
 
 unique_ptr<OperatorState> PhysicalPredictionFilter::GetOperatorState(ExecutionContext &context) const {
@@ -140,119 +277,7 @@ RET_TYPE PhysicalPredictionFilter::NextEvalAdapt(OperatorState &state, idx_t bat
 
 OperatorResultType PhysicalPredictionFilter::Execute(ExecutionContext &context, DataChunk &input,
  DataChunk &chunk, GlobalOperatorState &gstate, OperatorState &state) const {
-    auto &state_p = state.Cast<PredictionFilterState>();
-    
-    if(pgstate->IMLaneOptimize()) {
-        idx_t result_count = state_p.executor.SelectExpression(input, state_p.sel);
-        if (result_count == input.size()) {
-            // nothing was filtered: skip adding any selection vectors
-            chunk.Reference(input);
-        } else {
-            chunk.Slice(input, state_p.sel, result_count);
-        }
-        return OperatorResultType::NEED_MORE_INPUT;
-    }
-    
-    auto &controller = state_p.controller;
-    auto &sel = state_p.sel;
-    auto &padded = state_p.padded;
-    auto &output_left = state_p.output_left;
-    auto &base_offset = state_p.base_offset;
-    idx_t &batch_size = state_p.prediction_size;
-
-    if (!state_p.initialized) {
-		state_p.initialized = true;
-		state_p.can_cache_chunk = caching_supported && PhysicalOperator::OperatorCachingAllowed(context);
-	}
-    if(!state_p.can_cache_chunk){
-        idx_t result_count = state_p.executor.SelectExpression(input, state_p.sel);
-        if (result_count == input.size()) {
-            // nothing was filtered: skip adding any selection vectors
-            chunk.Reference(input);
-        } else {
-            chunk.Slice(input, state_p.sel, result_count);
-        }
-        return OperatorResultType::NEED_MORE_INPUT;
-    }
-
-    auto ret = OperatorResultType::HAVE_MORE_OUTPUT;
-
-    // batch adapting
-    if (output_left) {
-        if (output_left <= STANDARD_VECTOR_SIZE) {
-            controller->BatchAdapting(controller->CurrentBatch(), sel, chunk, base_offset, output_left);
-            output_left = 0;
-            base_offset = 0;
-        } else {
-            controller->BatchAdapting(controller->CurrentBatch(), sel, chunk, base_offset);
-            output_left -= STANDARD_VECTOR_SIZE;
-            base_offset += STANDARD_VECTOR_SIZE;
-        }
-
-        return ret;
-    }
-
-    switch (controller->GetState()) {
-        case BatchControllerState::SLICING: {
-            batch_size = state_p.tuner.GetBatchSize();
-            if (controller->HasNext(batch_size)) {
-                ret = NextEvalAdapt(state, batch_size, chunk,
-                OperatorResultType::HAVE_MORE_OUTPUT, OperatorResultType::HAVE_MORE_OUTPUT);
-            } else {
-                // check wheather the buffer should be reset
-                if (controller->GetSize() == 0) {
-                    // the buffer state is reset to EMPTY
-                    controller->ResetBuffer();
-                } else {
-                    controller->SetState(BatchControllerState::BUFFERRING);
-                }
-                ret = OperatorResultType::NEED_MORE_INPUT;
-            }            
-            break;
-        }
-        case BatchControllerState::EMPTY: {
-            batch_size = state_p.tuner.GetBatchSize();
-            controller->ResetBuffer();
-            idx_t remained = input.size() - padded;
-            ret = OperatorResultType::NEED_MORE_INPUT;
-
-            if (remained > 0) {
-                controller->PushChunk(input, padded, input.size());
-                if (remained < batch_size) {
-                    controller->SetState(BatchControllerState::BUFFERRING); 
-                } else {
-                    // opt: perform slicing directly
-                    controller->SetState(BatchControllerState::SLICING);
-                    ret = OperatorResultType::HAVE_MORE_OUTPUT;
-                }
-            }
-            padded = 0;
-            break;
-        }
-        case BatchControllerState::BUFFERRING: {
-            batch_size = state_p.tuner.GetBatchSize();
-
-            if (controller->GetSize() + input.size() < batch_size) {
-                controller->PushChunk(input);
-                controller->SetState(BatchControllerState::BUFFERRING);
-                ret = OperatorResultType::NEED_MORE_INPUT;
-            } else {
-                padded = batch_size - controller->GetSize();
-                controller->PushChunk(input, 0, padded);
-
-                ret = NextEvalAdapt(state, batch_size, chunk,
-                OperatorResultType::HAVE_MORE_OUTPUT, OperatorResultType::HAVE_MORE_OUTPUT);
-
-                controller->SetState(BatchControllerState::EMPTY);
-            }  
-            break;
-        }
-
-        default:
-            throw InternalException("BatchController State Unsupported");  
-    }
-
-    return ret;
+    return exec_func(context, input, chunk, gstate, state);
 }
 
 OperatorFinalizeResultType PhysicalPredictionFilter::FinalExecute(ExecutionContext &context,

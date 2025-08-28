@@ -5,6 +5,26 @@
 
 namespace duckdb {
 
+bool IsPredictionFunc(const BoundFunctionExpression &expr) {
+	if(expr.function.bridge_info == nullptr) {
+		return false;
+	}
+	FunctionKind kind = expr.function.bridge_info->kind;
+	bool res = false;
+    switch(kind){
+        case FunctionKind::COMMON:
+            break;
+        case FunctionKind::PREDICTION:
+			res = false;
+			break;
+        case FunctionKind::PROCESS_PREDICTION:
+        case FunctionKind::SCHEDULE_PREDICTION:
+            res = true;
+            break;
+    }
+    return res;
+}
+
 ExecuteFunctionState::ExecuteFunctionState(const Expression &expr, ExpressionExecutorState &root)
     : ExpressionState(expr, root) {
 }
@@ -79,7 +99,7 @@ void ExpressionExecutor::Execute(const BoundFunctionExpression &expr, Expression
 	D_ASSERT(expr.function.function);
 	
 	if(pgstate != nullptr) {
-		if(pgstate->IMLaneOptimize()) {
+		if(IsPredictionFunc(expr) && pgstate->IMLaneOptimize()) {
 			auto lane_context = pgstate->lane_context;
 			D_ASSERT(lane_context != nullptr);
 			lane_context->ExecuteFunction(expr.function.name, arguments, result);
