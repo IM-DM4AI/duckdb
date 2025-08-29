@@ -43,6 +43,7 @@ public:
 
 		sink->sink_state->state = sink_state;
 		event->FinishTask();
+		pipeline.SetEndTime();
 		return TaskExecutionResult::TASK_FINISHED;
 	}
 

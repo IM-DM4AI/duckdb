@@ -288,6 +288,9 @@ unique_ptr<QueryResult> ClientContext::FetchResultInternal(ClientContextLock &lo
 	D_ASSERT(executor.HasResultCollector());
 	// we have a result collector - fetch the result directly from the result collector
 	result = executor.GetResult();
+	if(executor.context.run_with_trace_pipeline){
+		executor.ShowPerPipelineExecuteTime();
+	}
 	if (!create_stream_result) {
 		CleanupInternal(lock, result.get(), false);
 	} else {
@@ -1015,6 +1018,10 @@ unique_ptr<PendingQueryResult> ClientContext::PendingQueryInternal(ClientContext
 
 unique_ptr<QueryResult> ClientContext::ExecutePendingQueryInternal(ClientContextLock &lock, PendingQueryResult &query) {
 	return query.ExecuteInternal(lock);
+}
+
+void ClientContext::SetRunWithTracePipeline(bool option){
+	run_with_trace_pipeline = option;
 }
 
 void ClientContext::Interrupt() {

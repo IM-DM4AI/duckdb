@@ -85,11 +85,15 @@ public:
 	unique_ptr<ClientData> client_data;
 	//! Data for the currently running transaction
 	TransactionContext transaction;
+	// ! run wit trace pipeline mode
+	bool run_with_trace_pipeline = false;
 
 public:
 	MetaTransaction &ActiveTransaction() {
 		return transaction.ActiveTransaction();
 	}
+
+	DUCKDB_API void SetRunWithTracePipeline(bool option=true);
 
 	//! Interrupt execution of a query
 	DUCKDB_API void Interrupt();

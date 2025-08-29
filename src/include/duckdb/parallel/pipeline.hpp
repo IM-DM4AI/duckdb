@@ -16,6 +16,7 @@
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/common/reference_map.hpp"
 #include "duckdb/parallel/executor_task.hpp"
+#include <chrono>
 
 namespace duckdb {
 
@@ -78,7 +79,7 @@ public:
 	explicit Pipeline(Executor &execution_context);
 
 	Executor &executor;
-
+	std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
 public:
 	ClientContext &GetClientContext();
 
@@ -90,6 +91,10 @@ public:
 	void ResetSource(bool force);
 	void ClearSource();
 	void Schedule(shared_ptr<Event> &event);
+
+	void SetStartTime();
+
+	void SetEndTime();
 
 	string ToString() const;
 	void Print() const;
