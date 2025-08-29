@@ -17,6 +17,9 @@
 #include "duckdb/parallel/pipeline.hpp"
 
 #include <condition_variable>
+#include <iostream>
+#include <string>
+#include <vector>
 
 namespace duckdb {
 class ClientContext;
@@ -43,7 +46,21 @@ public:
 
 	ClientContext &context;
 
+	// record pipeline_times
+	std::vector<double> pipeline_times;
+	std::vector<string> pipeline_names;
+
 public:
+	void ShowPerPipelineExecuteTime() {
+		string res;
+		int n = pipeline_times.size();
+		for (int i = 0; i < n; i++) {
+			res += "[ " + std::to_string(i) + " ]   use time: " + std::to_string(pipeline_times[i]) + "s     " + pipeline_names[i] + "\n";
+		}
+		std::cout << res << std::endl;
+	}
+
+
 	static Executor &Get(ClientContext &context);
 
 	void Initialize(PhysicalOperator &physical_plan);

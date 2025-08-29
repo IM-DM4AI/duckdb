@@ -31,6 +31,7 @@ const PipelineExecutor &PipelineTask::GetPipelineExecutor() const {
 
 TaskExecutionResult PipelineTask::ExecuteTask(TaskExecutionMode mode) {
 	if (!pipeline_executor) {
+		pipeline.SetStartTime();
 		pipeline_executor = make_uniq<PipelineExecutor>(pipeline.GetClientContext(), pipeline);
 	}
 
@@ -64,7 +65,23 @@ TaskExecutionResult PipelineTask::ExecuteTask(TaskExecutionMode mode) {
 	return TaskExecutionResult::TASK_FINISHED;
 }
 
-Pipeline::Pipeline(Executor &executor_p)
+void Pipeline::SetStartTime(){
+	if(executor.context.run_with_trace_pipeline){
+		start_time = std::chrono::high_resolution_clock::now();
+	}
+}
+
+void Pipeline::SetEndTime() {
+	if(executor.context.run_with_trace_pipeline){
+		auto end_time = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
+		double use_time = duration / 1e6;
+		executor.pipeline_times.push_back(use_time);
+		executor.pipeline_names.push_back(ToString());
+	}
+}
+
+Pipeline::Pipeline(Executor &executor_p) 
     : executor(executor_p), ready(false), initialized(false), source(nullptr), sink(nullptr) {
 }
 
