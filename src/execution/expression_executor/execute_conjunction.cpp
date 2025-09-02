@@ -18,6 +18,10 @@ struct ConjunctionState : public ExpressionState {
 unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const BoundConjunctionExpression &expr,
                                                                 ExpressionExecutorState &root, idx_t capacity) {
 	auto result = make_uniq<ConjunctionState>(expr, root);
+	auto &flags = root.executor->sub_expr_eval_flags;
+	flags.push_back(0);
+	result->eval_flag_idx = flags.size() - 1;
+	
 	for (auto &child : expr.children) {
 		result->AddChild(child.get(), capacity);
 	}
@@ -28,10 +32,25 @@ unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const BoundConju
 void ExpressionExecutor::Execute(const BoundConjunctionExpression &expr, ExpressionState *state,
                                  const SelectionVector *sel, idx_t count, Vector &result) {
 	// execute the children
+
+	bool args_uneval = true;
+	for (idx_t i = 0; i < expr.children.size(); i++) {
+		if ((state->child_states[i]->IsEvaluated())) {
+			args_uneval = false;
+			break;
+		}
+	}
+
+	if (args_uneval) {
+		state->intermediate_chunk.Reset();
+	}
 	state->intermediate_chunk.Reset();
 	for (idx_t i = 0; i < expr.children.size(); i++) {
 		auto &current_result = state->intermediate_chunk.data[i];
 		Execute(*expr.children[i], state->child_states[i].get(), sel, count, current_result);
+		if (!((state->child_states[i]->IsEvaluated()))) {
+			return;
+		}
 		if (i == 0) {
 			// move the result
 			result.Reference(current_result);
@@ -51,6 +70,7 @@ void ExpressionExecutor::Execute(const BoundConjunctionExpression &expr, Express
 			result.Reference(intermediate);
 		}
 	}
+	state->SetEvaluated();
 }
 
 idx_t ExpressionExecutor::Select(const BoundConjunctionExpression &expr, ExpressionState *state_p,
@@ -78,6 +98,10 @@ idx_t ExpressionExecutor::Select(const BoundConjunctionExpression &expr, Express
 			idx_t tcount = Select(*expr.children[state.adaptive_filter->permutation[i]],
 			                      state.child_states[state.adaptive_filter->permutation[i]].get(), current_sel,
 			                      current_count, true_sel, temp_false.get());
+
+			if(!(state.child_states[state.adaptive_filter->permutation[i]]->IsEvaluated())) {
+				return count;
+			}
 			idx_t fcount = current_count - tcount;
 			if (fcount > 0 && false_sel) {
 				// move failing tuples into the false_sel
@@ -100,6 +124,7 @@ idx_t ExpressionExecutor::Select(const BoundConjunctionExpression &expr, Express
 		// adapt runtime statistics
 		auto end_time = high_resolution_clock::now();
 		state.adaptive_filter->AdaptRuntimeStatistics(duration_cast<duration<double>>(end_time - start_time).count());
+		state.SetEvaluated();
 		return current_count;
 	} else {
 		// get runtime statistics
@@ -121,6 +146,10 @@ idx_t ExpressionExecutor::Select(const BoundConjunctionExpression &expr, Express
 			idx_t tcount = Select(*expr.children[state.adaptive_filter->permutation[i]],
 			                      state.child_states[state.adaptive_filter->permutation[i]].get(), current_sel,
 			                      current_count, temp_true.get(), false_sel);
+
+			if(!(state.child_states[state.adaptive_filter->permutation[i]]->IsEvaluated())) {
+				return count;
+			}
 			if (tcount > 0) {
 				if (true_sel) {
 					// tuples passed, move them into the actual result vector
@@ -137,6 +166,7 @@ idx_t ExpressionExecutor::Select(const BoundConjunctionExpression &expr, Express
 		// adapt runtime statistics
 		auto end_time = high_resolution_clock::now();
 		state.adaptive_filter->AdaptRuntimeStatistics(duration_cast<duration<double>>(end_time - start_time).count());
+		state.SetEvaluated();
 		return result_count;
 	}
 }

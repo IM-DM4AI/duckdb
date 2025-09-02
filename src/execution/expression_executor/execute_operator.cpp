@@ -7,6 +7,10 @@ namespace duckdb {
 unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const BoundOperatorExpression &expr,
                                                                 ExpressionExecutorState &root, idx_t capacity) {
 	auto result = make_uniq<ExpressionState>(expr, root);
+	auto &flags = root.executor->sub_expr_eval_flags;
+	flags.push_back(0);
+	result->eval_flag_idx = flags.size() - 1;
+	
 	for (auto &child : expr.children) {
 		result->AddChild(child.get(), capacity);
 	}
@@ -26,6 +30,9 @@ void ExpressionExecutor::Execute(const BoundOperatorExpression &expr, Expression
 		Vector left(expr.children[0]->return_type);
 		// eval left side
 		Execute(*expr.children[0], state->child_states[0].get(), sel, count, left);
+		if(!(state->child_states[0]->IsEvaluated())) {
+			return;
+		}
 
 		// init result to false
 		Vector intermediate(LogicalType::BOOLEAN);
@@ -40,6 +47,9 @@ void ExpressionExecutor::Execute(const BoundOperatorExpression &expr, Expression
 			Vector comp_res(LogicalType::BOOLEAN);
 
 			Execute(*expr.children[child], state->child_states[child].get(), sel, count, vector_to_check);
+			if(!(state->child_states[child]->IsEvaluated())) {
+				return;
+			}
 			VectorOperations::Equals(left, vector_to_check, comp_res, count);
 
 			if (child == 1) {
@@ -72,6 +82,9 @@ void ExpressionExecutor::Execute(const BoundOperatorExpression &expr, Expression
 			Vector vector_to_check(expr.children[child]->return_type);
 			Execute(*expr.children[child], state->child_states[child].get(), current_sel, remaining_count,
 			        vector_to_check);
+			if(!(state->child_states[child]->IsEvaluated())) {
+				return;
+			}
 
 			UnifiedVectorFormat vdata;
 			vector_to_check.ToUnifiedFormat(remaining_count, vdata);
@@ -114,6 +127,9 @@ void ExpressionExecutor::Execute(const BoundOperatorExpression &expr, Expression
 		auto &child = state->intermediate_chunk.data[0];
 
 		Execute(*expr.children[0], state->child_states[0].get(), sel, count, child);
+		if(!(state->child_states[0]->IsEvaluated())) {
+			return;
+		}
 		switch (expr.type) {
 		case ExpressionType::OPERATOR_NOT: {
 			VectorOperations::Not(child, result, count);
@@ -133,6 +149,8 @@ void ExpressionExecutor::Execute(const BoundOperatorExpression &expr, Expression
 	} else {
 		throw NotImplementedException("operator");
 	}
+
+	state->SetEvaluated();
 }
 
 } // namespace duckdb

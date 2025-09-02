@@ -8,6 +8,8 @@
 namespace duckdb {
 
 ExpressionExecutor::ExpressionExecutor(ClientContext &context) : context(&context), pgstate(nullptr) {
+	sub_expr_eval_flags.reserve(256);
+	eval_finish = false;
 }
 
 ExpressionExecutor::ExpressionExecutor(ClientContext &context, const Expression *expression)
@@ -43,6 +45,8 @@ ExpressionExecutor::ExpressionExecutor(ClientContext &context, const vector<uniq
 }
 
 ExpressionExecutor::ExpressionExecutor(const vector<unique_ptr<Expression>> &exprs) : context(nullptr), pgstate(nullptr) {
+	eval_finish = false;
+	sub_expr_eval_flags.reserve(256);
 	D_ASSERT(exprs.size() > 0);
 	for (auto &expr : exprs) {
 		AddExpression(*expr);
@@ -85,9 +89,19 @@ void ExpressionExecutor::Execute(DataChunk *input, DataChunk &result) {
 	D_ASSERT(expressions.size() == result.ColumnCount());
 	D_ASSERT(!expressions.empty());
 
+	if(eval_finish) {
+		eval_finish = false;
+		std::memset(sub_expr_eval_flags.data(), 0, sizeof(int)*sub_expr_eval_flags.size());
+	}
+
 	for (idx_t i = 0; i < expressions.size(); i++) {
 		ExecuteExpression(i, result.data[i]);
+		if(!(states[i]->root_state->IsEvaluated())) {
+			return;
+		}
 	}
+
+	eval_finish = true;
 	result.SetCardinality(input ? input->size() : 1);
 	result.Verify();
 }
@@ -100,7 +114,16 @@ void ExpressionExecutor::ExecuteExpression(DataChunk &input, Vector &result) {
 idx_t ExpressionExecutor::SelectExpression(DataChunk &input, SelectionVector &sel) {
 	D_ASSERT(expressions.size() == 1);
 	SetChunk(&input);
+	if(eval_finish) {
+		eval_finish = false;
+		std::memset(sub_expr_eval_flags.data(), 0, sizeof(int)*sub_expr_eval_flags.size());
+	}
+
 	idx_t selected_tuples = Select(*expressions[0], states[0]->root_state.get(), nullptr, input.size(), &sel, nullptr);
+	if (!(states[0]->root_state->IsEvaluated())) {
+		return input.size();
+	}
+	eval_finish = true;
 	return selected_tuples;
 }
 
@@ -190,6 +213,9 @@ void ExpressionExecutor::Execute(const Expression &expr, ExpressionState *state,
 	}
 #endif
 
+	if (state->IsEvaluated()) {
+		return;
+	}
 	if (count == 0) {
 		return;
 	}
@@ -306,6 +332,9 @@ idx_t ExpressionExecutor::DefaultSelect(const Expression &expr, ExpressionState 
 	bool intermediate_bools[STANDARD_VECTOR_SIZE];
 	Vector intermediate(LogicalType::BOOLEAN, data_ptr_cast(intermediate_bools));
 	Execute(expr, state, sel, count, intermediate);
+	if(!(state->IsEvaluated())) {
+		return count;
+	}
 
 	UnifiedVectorFormat idata;
 	intermediate.ToUnifiedFormat(count, idata);

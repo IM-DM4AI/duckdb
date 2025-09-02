@@ -27,6 +27,7 @@ bool IsPredictionFunc(const BoundFunctionExpression &expr) {
 
 ExecuteFunctionState::ExecuteFunctionState(const Expression &expr, ExpressionExecutorState &root)
     : ExpressionState(expr, root) {
+	exec_ctx = nullptr;
 }
 
 ExecuteFunctionState::~ExecuteFunctionState() {
@@ -35,6 +36,12 @@ ExecuteFunctionState::~ExecuteFunctionState() {
 unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const BoundFunctionExpression &expr,
                                                                 ExpressionExecutorState &root, idx_t capacity) {
 	auto result = make_uniq<ExecuteFunctionState>(expr, root);
+	auto &flags = root.executor->sub_expr_eval_flags;
+	flags.push_back(0);
+	result->eval_flag_idx = flags.size() - 1;
+
+	result->exec_ctx = nullptr;
+	
 	for (auto &child : expr.children) {
 		result->AddChild(child.get(), capacity);
 	}
@@ -80,12 +87,27 @@ static void VerifyNullHandling(const BoundFunctionExpression &expr, DataChunk &a
 
 void ExpressionExecutor::Execute(const BoundFunctionExpression &expr, ExpressionState *state,
                                  const SelectionVector *sel, idx_t count, Vector &result) {
-	state->intermediate_chunk.Reset();
+	// only reset args chunk when all args exprs are not evaluated
+	// opt: Does nested UDF exist?
+	bool args_uneval = true;
+	for (idx_t i = 0; i < expr.children.size(); i++) {
+		if (state->child_states[i]->IsEvaluated()) {
+			args_uneval = false;
+			break;
+		}
+	}
+
+	if (args_uneval) {
+		state->intermediate_chunk.Reset();
+	}
 	auto &arguments = state->intermediate_chunk;
 	if (!state->types.empty()) {
 		for (idx_t i = 0; i < expr.children.size(); i++) {
 			D_ASSERT(state->types[i] == expr.children[i]->return_type);
 			Execute(*expr.children[i], state->child_states[i].get(), sel, count, arguments.data[i]);
+			if (!state->child_states[i]->IsEvaluated()) {
+				return;
+			}
 #ifdef DEBUG
 			if (expr.children[i]->return_type.id() == LogicalTypeId::VARCHAR) {
 				arguments.data[i].UTFVerify(count);
@@ -102,7 +124,23 @@ void ExpressionExecutor::Execute(const BoundFunctionExpression &expr, Expression
 		if(IsPredictionFunc(expr) && pgstate->IMLaneOptimize()) {
 			auto lane_context = pgstate->lane_context;
 			D_ASSERT(lane_context != nullptr);
-			lane_context->ExecuteFunction(expr.function.name, arguments, result);
+			if(pgstate->kind == FunctionKind::PROCESS_PREDICTION) {
+				lane_context->ExecuteFunction(expr.function.name, arguments, result);
+			} else {
+				auto &state_f = state->Cast<ExecuteFunctionState>();
+				if(state_f.exec_ctx == nullptr) {
+					auto pull_p = lane_context->ExecuteFunctionPush(expr.function.name, arguments, result);
+					state_f.exec_ctx = shared_ptr<IMLane::DBEnd::ExecFuncContext<DataChunk, Vector>>(std::move(pull_p));
+					return;
+				} else {
+					auto success = state_f.exec_ctx->ExecuteFuncTryPull();
+					if(!success) {
+						return;
+					} else {
+						state_f.exec_ctx = nullptr;
+					}
+				}
+			}
 		} else {
 			expr.function.function(arguments, *state, result);
 		}
@@ -112,6 +150,8 @@ void ExpressionExecutor::Execute(const BoundFunctionExpression &expr, Expression
 
 	VerifyNullHandling(expr, arguments, result);
 	D_ASSERT(result.GetType() == expr.return_type);
+	
+	state->SetEvaluated();
 }
 
 } // namespace duckdb

@@ -42,6 +42,13 @@ public:
 	//! column references and determines the output cardinality
 	DataChunk *chunk = nullptr;
 
+
+	// IMLane optimization: flags for all exprs in this executor
+	// to avoid re-computation during udf result pull and direct the behavior
+	// of the prediction operator.
+	vector<int> sub_expr_eval_flags;
+	bool eval_finish;
+
 public:
 	bool HasContext();
 	ClientContext &GetContext();

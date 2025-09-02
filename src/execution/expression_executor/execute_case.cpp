@@ -17,6 +17,10 @@ struct CaseExpressionState : public ExpressionState {
 unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const BoundCaseExpression &expr,
                                                                 ExpressionExecutorState &root, idx_t capacity) {
 	auto result = make_uniq<CaseExpressionState>(expr, root);
+	auto &flags = root.executor->sub_expr_eval_flags;
+	flags.push_back(0);
+	result->eval_flag_idx = flags.size() - 1;
+
 	for (auto &case_check : expr.case_checks) {
 		result->AddChild(case_check.when_expr.get(), capacity);
 		result->AddChild(case_check.then_expr.get(), capacity);
@@ -45,6 +49,9 @@ void ExpressionExecutor::Execute(const BoundCaseExpression &expr, ExpressionStat
 
 		idx_t tcount =
 		    Select(*case_check.when_expr, check_state, current_sel, current_count, current_true_sel, current_false_sel);
+			if(!(check_state->IsEvaluated())) {
+				return;
+			}
 		if (tcount == 0) {
 			// everything is false: do nothing
 			continue;
@@ -54,10 +61,17 @@ void ExpressionExecutor::Execute(const BoundCaseExpression &expr, ExpressionStat
 			// everything is true in the first CHECK statement
 			// we can skip the entire case and only execute the TRUE side
 			Execute(*case_check.then_expr, then_state, sel, count, result);
+			if(!(then_state->IsEvaluated())) {
+				return;
+			}
+			state_p->SetEvaluated();
 			return;
 		} else {
 			// we need to execute and then fill in the desired tuples in the result
 			Execute(*case_check.then_expr, then_state, current_true_sel, tcount, intermediate_result);
+			if(!(then_state->IsEvaluated())) {
+				return;
+			}
 			FillSwitch(intermediate_result, result, *current_true_sel, NumericCast<sel_t>(tcount));
 		}
 		// continue with the false tuples
@@ -73,18 +87,27 @@ void ExpressionExecutor::Execute(const BoundCaseExpression &expr, ExpressionStat
 		if (current_count == count) {
 			// everything was false, we can just evaluate the else expression directly
 			Execute(*expr.else_expr, else_state, sel, count, result);
+			if(!(else_state->IsEvaluated())) {
+				return;
+			}
+			state_p->SetEvaluated();
 			return;
 		} else {
 			auto &intermediate_result = state.intermediate_chunk.data[expr.case_checks.size() * 2];
 
 			D_ASSERT(current_sel);
 			Execute(*expr.else_expr, else_state, current_sel, current_count, intermediate_result);
+			if(!(else_state->IsEvaluated())) {
+				return;
+			}
 			FillSwitch(intermediate_result, result, *current_sel, NumericCast<sel_t>(current_count));
 		}
 	}
 	if (sel) {
 		result.Slice(*sel, count);
 	}
+
+	state_p->SetEvaluated();
 }
 
 template <class T>

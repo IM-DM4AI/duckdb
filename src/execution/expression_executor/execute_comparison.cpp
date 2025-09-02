@@ -12,6 +12,10 @@ namespace duckdb {
 unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const BoundComparisonExpression &expr,
                                                                 ExpressionExecutorState &root, idx_t capacity) {
 	auto result = make_uniq<ExpressionState>(expr, root);
+	auto &flags = root.executor->sub_expr_eval_flags;
+	flags.push_back(0);
+	result->eval_flag_idx = flags.size() - 1;
+	
 	result->AddChild(expr.left.get(), capacity);
 	result->AddChild(expr.right.get(), capacity);
 	result->Finalize(false, capacity);
@@ -21,12 +25,23 @@ unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const BoundCompa
 void ExpressionExecutor::Execute(const BoundComparisonExpression &expr, ExpressionState *state,
                                  const SelectionVector *sel, idx_t count, Vector &result) {
 	// resolve the children
-	state->intermediate_chunk.Reset();
+	auto left_eval = state->child_states[0]->IsEvaluated();
+	auto right_eval = state->child_states[1]->IsEvaluated();
+
+	if(!(left_eval||right_eval)) {
+		state->intermediate_chunk.Reset();
+	}
 	auto &left = state->intermediate_chunk.data[0];
 	auto &right = state->intermediate_chunk.data[1];
 
 	Execute(*expr.left, state->child_states[0].get(), sel, count, left);
+	if (!(state->child_states[0]->IsEvaluated())) {
+		return;
+	}
 	Execute(*expr.right, state->child_states[1].get(), sel, count, right);
+	if (!(state->child_states[1]->IsEvaluated())) {
+		return;
+	}
 
 	switch (expr.type) {
 	case ExpressionType::COMPARE_EQUAL:
@@ -56,6 +71,8 @@ void ExpressionExecutor::Execute(const BoundComparisonExpression &expr, Expressi
 	default:
 		throw InternalException("Unknown comparison type!");
 	}
+
+	state->SetEvaluated();
 }
 
 static void UpdateNullMask(Vector &vec, optional_ptr<const SelectionVector> sel, idx_t count, ValidityMask &null_mask) {
@@ -348,13 +365,30 @@ idx_t VectorOperations::LessThanEquals(Vector &left, Vector &right, optional_ptr
 idx_t ExpressionExecutor::Select(const BoundComparisonExpression &expr, ExpressionState *state,
                                  const SelectionVector *sel, idx_t count, SelectionVector *true_sel,
                                  SelectionVector *false_sel) {
+	
+	if(state->IsEvaluated()) {
+		return count;
+	}
 	// resolve the children
-	state->intermediate_chunk.Reset();
+	auto left_eval = state->child_states[0]->IsEvaluated();
+	auto right_eval = state->child_states[1]->IsEvaluated();
+
+	if(!(left_eval||right_eval)) {
+		state->intermediate_chunk.Reset();
+	}
 	auto &left = state->intermediate_chunk.data[0];
 	auto &right = state->intermediate_chunk.data[1];
 
 	Execute(*expr.left, state->child_states[0].get(), sel, count, left);
+	if (!(state->child_states[0]->IsEvaluated())) {
+		return count;
+	}
 	Execute(*expr.right, state->child_states[1].get(), sel, count, right);
+	if (!(state->child_states[1]->IsEvaluated())) {
+		return count;
+	}
+
+	state->SetEvaluated();
 
 	switch (expr.type) {
 	case ExpressionType::COMPARE_EQUAL:

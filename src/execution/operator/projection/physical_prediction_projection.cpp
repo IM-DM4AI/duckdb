@@ -252,7 +252,15 @@ OperatorResultType PhysicalPredictionProjection::ProcessExec(ExecutionContext &c
 
 OperatorResultType PhysicalPredictionProjection::ProcessSchedExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
     GlobalOperatorState &gstate, OperatorState &state_p) const {
-    return OperatorResultType::FINISHED;
+        auto &state = state_p.Cast<PredictionProjectionState>();
+
+        while(true) {
+            state.executor.Execute(input, chunk);
+            if(state.executor.eval_finish){
+                break;
+            }
+        }
+        return OperatorResultType::NEED_MORE_INPUT;
 }
 
 OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,

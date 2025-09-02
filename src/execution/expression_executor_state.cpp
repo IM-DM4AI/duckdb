@@ -55,6 +55,18 @@ ClientContext &ExpressionState::GetContext() {
 ExpressionState::ExpressionState(const Expression &expr, ExpressionExecutorState &root) : expr(expr), root(root) {
 }
 
+bool ExpressionState::IsEvaluated() {
+	return root.executor->sub_expr_eval_flags[eval_flag_idx];
+}
+
+void ExpressionState::SetEvaluated() {
+	root.executor->sub_expr_eval_flags[eval_flag_idx] = true;
+}
+
+void ExpressionState::ResetEvaluated() {
+	root.executor->sub_expr_eval_flags[eval_flag_idx] = false;
+}
+
 ExpressionExecutorState::ExpressionExecutorState() {
 }
 

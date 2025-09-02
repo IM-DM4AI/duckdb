@@ -5,7 +5,12 @@ namespace duckdb {
 
 unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const BoundReferenceExpression &expr,
                                                                 ExpressionExecutorState &root, idx_t capacity) {
+
 	auto result = make_uniq<ExpressionState>(expr, root);
+	auto &flags = root.executor->sub_expr_eval_flags;
+	flags.push_back(0);
+	result->eval_flag_idx = flags.size() - 1;
+	
 	result->Finalize(true, capacity);
 	return result;
 }
@@ -20,6 +25,8 @@ void ExpressionExecutor::Execute(const BoundReferenceExpression &expr, Expressio
 	} else {
 		result.Reference(chunk->data[expr.index]);
 	}
+
+	state->SetEvaluated();
 }
 
 } // namespace duckdb

@@ -89,6 +89,10 @@ static idx_t BetweenLoopTypeSwitch(Vector &input, Vector &lower, Vector &upper, 
 unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const BoundBetweenExpression &expr,
                                                                 ExpressionExecutorState &root, idx_t capacity) {
 	auto result = make_uniq<ExpressionState>(expr, root);
+	auto &flags = root.executor->sub_expr_eval_flags;
+	flags.push_back(0);
+	result->eval_flag_idx = flags.size() - 1;
+
 	result->AddChild(expr.input.get(), capacity);
 	result->AddChild(expr.lower.get(), capacity);
 	result->AddChild(expr.upper.get(), capacity);
@@ -99,15 +103,32 @@ unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const BoundBetwe
 void ExpressionExecutor::Execute(const BoundBetweenExpression &expr, ExpressionState *state, const SelectionVector *sel,
                                  idx_t count, Vector &result) {
 	// resolve the children
-	state->intermediate_chunk.Reset();
+	
+	auto input_eval = state->child_states[0]->IsEvaluated();
+	auto lower_eval = state->child_states[1]->IsEvaluated();
+	auto upper_eval = state->child_states[2]->IsEvaluated();
+
+	
+	if(!(input_eval||lower_eval||upper_eval)) {
+		state->intermediate_chunk.Reset();
+	}
 
 	auto &input = state->intermediate_chunk.data[0];
 	auto &lower = state->intermediate_chunk.data[1];
 	auto &upper = state->intermediate_chunk.data[2];
 
 	Execute(*expr.input, state->child_states[0].get(), sel, count, input);
+	if(!(state->child_states[0]->IsEvaluated())) {
+		return;
+	}
 	Execute(*expr.lower, state->child_states[1].get(), sel, count, lower);
+	if(!(state->child_states[1]->IsEvaluated())) {
+		return;
+	}
 	Execute(*expr.upper, state->child_states[2].get(), sel, count, upper);
+	if(!(state->child_states[2]->IsEvaluated())) {
+		return;
+	}
 
 	Vector intermediate1(LogicalType::BOOLEAN);
 	Vector intermediate2(LogicalType::BOOLEAN);
@@ -126,18 +147,41 @@ void ExpressionExecutor::Execute(const BoundBetweenExpression &expr, ExpressionS
 		VectorOperations::LessThan(input, upper, intermediate2, count);
 	}
 	VectorOperations::And(intermediate1, intermediate2, result, count);
+
+	state->SetEvaluated();
 }
 
 idx_t ExpressionExecutor::Select(const BoundBetweenExpression &expr, ExpressionState *state, const SelectionVector *sel,
                                  idx_t count, SelectionVector *true_sel, SelectionVector *false_sel) {
 	// resolve the children
+
+	auto input_eval = state->child_states[0]->IsEvaluated();
+	auto lower_eval = state->child_states[1]->IsEvaluated();
+	auto upper_eval = state->child_states[2]->IsEvaluated();
+
+	
+	if(!(input_eval||lower_eval||upper_eval)) {
+		state->intermediate_chunk.Reset();
+	}
+
 	Vector input(state->intermediate_chunk.data[0]);
 	Vector lower(state->intermediate_chunk.data[1]);
 	Vector upper(state->intermediate_chunk.data[2]);
 
 	Execute(*expr.input, state->child_states[0].get(), sel, count, input);
+	if(!(state->child_states[0]->IsEvaluated())) {
+		return count;
+	}
 	Execute(*expr.lower, state->child_states[1].get(), sel, count, lower);
+	if(!(state->child_states[1]->IsEvaluated())) {
+		return count;
+	}
 	Execute(*expr.upper, state->child_states[2].get(), sel, count, upper);
+	if(!(state->child_states[2]->IsEvaluated())) {
+		return count;
+	}
+
+	state->SetEvaluated();
 
 	if (expr.upper_inclusive && expr.lower_inclusive) {
 		return BetweenLoopTypeSwitch<BothInclusiveBetweenOperator>(input, lower, upper, sel, count, true_sel,

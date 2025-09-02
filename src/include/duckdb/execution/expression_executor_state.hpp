@@ -12,6 +12,14 @@
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/function/function.hpp"
 
+namespace IMLane {
+	namespace DBEnd {
+		template<typename ARGS_TYPE, typename RET_TYPE>
+		class ExecFuncContext;
+	}
+}
+
+
 namespace duckdb {
 class Expression;
 class ExpressionExecutor;
@@ -28,6 +36,14 @@ struct ExpressionState {
 	vector<unique_ptr<ExpressionState>> child_states;
 	vector<LogicalType> types;
 	DataChunk intermediate_chunk;
+
+	// IMLane optimization: indicate wheather expr with this state
+	// is evaluated to avoid re-computation during udf result pull.
+	idx_t eval_flag_idx;
+public:
+	bool IsEvaluated();
+	void SetEvaluated();
+	void ResetEvaluated();
 
 public:
 	void AddChild(Expression *expr, idx_t capacity = STANDARD_VECTOR_SIZE);
@@ -57,6 +73,8 @@ struct ExecuteFunctionState : public ExpressionState {
 	~ExecuteFunctionState() override;
 
 	unique_ptr<FunctionLocalState> local_state;
+
+	shared_ptr<IMLane::DBEnd::ExecFuncContext<DataChunk, Vector>> exec_ctx;
 
 public:
 	static optional_ptr<FunctionLocalState> GetFunctionState(ExpressionState &state) {
