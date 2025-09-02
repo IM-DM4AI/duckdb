@@ -56,7 +56,7 @@ public:
 public:
 	//! Returns query profiling information for the current query
 	DUCKDB_API string GetProfilingInformation(ProfilerPrintFormat format = ProfilerPrintFormat::QUERY_TREE);
-
+	DUCKDB_API void TraceSet(bool opt = true);
 	//! Interrupt execution of the current query
 	DUCKDB_API void Interrupt();
 
