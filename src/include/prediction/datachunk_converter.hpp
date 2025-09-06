@@ -133,7 +133,7 @@ namespace IMLane {
             void ConvertFromExchange(std::shared_ptr<ArrowLaneTable> tbl, duckdb::Vector &out) {
                 auto &schema = tbl->schema;
                 D_ASSERT(tbl->GetNumChunks() == 1);
-                duckdb::ConverArrowAarrayToVector(&tbl->chunks[0], &schema, out);
+                duckdb::ConverArrowAarrayToVector(tbl->chunks[0].children[0], &schema, out);
             }
         };
     }

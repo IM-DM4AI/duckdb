@@ -7,6 +7,8 @@ namespace duckdb {
 
 namespace prediction {
 
+class PredictionProjectionGlobalState;
+
 class PhysicalPredictionProjection : public PhysicalOperator {
 public:
 	static constexpr const PhysicalOperatorType TYPE = PhysicalOperatorType::PREDICTION_PROJECTION;
@@ -26,14 +28,23 @@ public:
 	std::function<OperatorResultType(ExecutionContext&, DataChunk&,
 		 DataChunk&, GlobalOperatorState&, OperatorState&)> exec_func;
 
+	std::function<OperatorFinalizeResultType(ExecutionContext&,
+		DataChunk&, GlobalOperatorState&, OperatorState&)> final_exec_func;
+		
 	OperatorResultType BatchingExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 			GlobalOperatorState &gstate, OperatorState &state_p) const;
+	OperatorFinalizeResultType BatchingFinalExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+				OperatorState &state) const;
 	
 	OperatorResultType ProcessExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 			GlobalOperatorState &gstate, OperatorState &state_p) const;
+	OperatorFinalizeResultType ProcessFinalExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+			OperatorState &state) const;
 
 	OperatorResultType ProcessSchedExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 			GlobalOperatorState &gstate, OperatorState &state_p) const;
+	OperatorFinalizeResultType ProcessSchedFinalExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+			OperatorState &state) const;
 
 public:
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;
@@ -53,9 +64,7 @@ public:
 		return true;
 	}
 
-	~PhysicalPredictionProjection() {
-		delete pgstate;
-	}
+	~PhysicalPredictionProjection();
 
 	OperatorFinalizeResultType FinalExecute(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
 	                                        OperatorState &state) const final;
