@@ -41,6 +41,11 @@ unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const BoundFunct
 	result->eval_flag_idx = flags.size() - 1;
 
 	result->exec_ctx = nullptr;
+	if(prediction::core_aware) {
+		result->sched_hint = make_uniq<IMLane::DBEnd::SchedHint>();
+	} else {
+		result->sched_hint = nullptr;
+	}
 	
 	for (auto &child : expr.children) {
 		result->AddChild(child.get(), capacity);
@@ -124,8 +129,14 @@ void ExpressionExecutor::Execute(const BoundFunctionExpression &expr, Expression
 		if(IsPredictionFunc(expr) && pgstate->IMLaneOptimize()) {
 			auto lane_context = pgstate->lane_context;
 			D_ASSERT(lane_context != nullptr);
+			auto &state_f = state->Cast<ExecuteFunctionState>();
+			IMLane::DBEnd::SchedHint *hint = nullptr;
+			if(state_f.sched_hint) {
+				hint = state_f.sched_hint.get();
+				hint->core_id = prediction::GetCurrentCpu();
+			}
 			if(pgstate->kind == FunctionKind::PROCESS_PREDICTION) {
-				lane_context->ExecuteFunction(expr.function.name, arguments, result);
+				lane_context->ExecuteFunction(expr.function.name, arguments, result, hint);
 			} else {
 				auto &state_f = state->Cast<ExecuteFunctionState>();
 				if(state_f.exec_ctx == nullptr) {

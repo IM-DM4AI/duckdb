@@ -2,6 +2,7 @@
 
 #include <list>
 
+#include <unistd.h>
 #include "duckdb/execution/physical_operator_states.hpp"
 
 #include "prediction/params.hpp"
@@ -22,6 +23,12 @@ namespace duckdb {
     namespace prediction {
 
         struct LaneSchedQueue;
+
+        static bool core_aware = true; 
+
+        static int GetCurrentCpu() {
+            return sched_getcpu();
+        }
 
         enum class SchedState: uint8_t {SCHEDULE,  OUTPUT};
 

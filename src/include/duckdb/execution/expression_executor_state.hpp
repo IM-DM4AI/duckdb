@@ -16,6 +16,7 @@ namespace IMLane {
 	namespace DBEnd {
 		template<typename ARGS_TYPE, typename RET_TYPE>
 		class ExecFuncContext;
+		struct SchedHint;
 	}
 }
 
@@ -75,6 +76,8 @@ struct ExecuteFunctionState : public ExpressionState {
 	unique_ptr<FunctionLocalState> local_state;
 
 	shared_ptr<IMLane::DBEnd::ExecFuncContext<DataChunk, Vector>> exec_ctx;
+
+	unique_ptr<IMLane::DBEnd::SchedHint> sched_hint;
 
 public:
 	static optional_ptr<FunctionLocalState> GetFunctionState(ExpressionState &state) {
