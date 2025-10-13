@@ -123,8 +123,6 @@ bool PhysicalPredictionProjection::CanCacheType(const LogicalType &type) {
 	}
 }
 
-int my_count = 0;
-
 PhysicalPredictionProjection::PhysicalPredictionProjection(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list,
                                        idx_t estimated_cardinality, idx_t user_defined_size, FunctionKind kind)
     : PhysicalOperator(PhysicalOperatorType::PREDICTION_PROJECTION, std::move(types), estimated_cardinality),

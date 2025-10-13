@@ -143,7 +143,9 @@ void ExpressionExecutor::Execute(const BoundFunctionExpression &expr, Expression
 					auto pull_p = lane_context->ExecuteFunctionPush(expr.function.name, arguments, result);
 					state_f.exec_ctx = shared_ptr<IMLane::DBEnd::ExecFuncContext<DataChunk, Vector>>(std::move(pull_p));
 				} else {
-					auto is_ready = state_f.exec_ctx->ExecuteFuncTryPull();
+					// auto is_ready = state_f.exec_ctx->ExecuteFuncTryPull();
+					state_f.exec_ctx->ExecuteFuncPull();
+					auto is_ready = true;
 					if(!is_ready) {
 						return;
 					} else {
