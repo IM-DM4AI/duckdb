@@ -7,7 +7,7 @@
 
 namespace duckdb {
 
-enum class FunctionKind: u_int8_t {COMMON = 0, PREDICTION=1, PROCESS_PREDICTION=2, SCHEDULE_PREDICTION=3};
+enum class FunctionKind: u_int8_t {COMMON = 0, PREDICTION=1, PROCESS_PREDICTION=2, SCHEDULE_PREDICTION=3, THREAD_SCHEDULE_PREDICTION=4};
 
 struct IMBridgeExtraInfo
 {

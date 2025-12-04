@@ -66,6 +66,7 @@ struct ProjectionLaneSlot {
     unique_ptr<ExpressionExecutor> executor;
     unique_ptr<DataChunk> input;
     unique_ptr<DataChunk> output;
+    std::unique_ptr<IMLane::DBEnd::ExecAsyncFuncContext> task;
 
     ProjectionLaneSlot(ClientContext &context, const vector<unique_ptr<Expression>> &expressions,
      const vector<LogicalType> &input_types, const vector<LogicalType> &output_types, PredictionGlobalState* pgstate) {
@@ -165,6 +166,16 @@ PhysicalPredictionProjection::PhysicalPredictionProjection(vector<LogicalType> t
                     std::placeholders::_3, std::placeholders::_4,
                     std::placeholders::_5);
                 final_exec_func = std::bind(&PhysicalPredictionProjection::ProcessSchedFinalExec, this, 
+                    std::placeholders::_1, std::placeholders::_2,
+                    std::placeholders::_3, std::placeholders::_4);
+                break;
+            }
+            case FunctionKind::THREAD_SCHEDULE_PREDICTION: {
+                exec_func = std::bind(&PhysicalPredictionProjection::ProcessSchedPoolExec, this, 
+                    std::placeholders::_1, std::placeholders::_2,
+                    std::placeholders::_3, std::placeholders::_4,
+                    std::placeholders::_5);
+                final_exec_func = std::bind(&PhysicalPredictionProjection::ProcessSchedFinalPoolExec, this, 
                     std::placeholders::_1, std::placeholders::_2,
                     std::placeholders::_3, std::placeholders::_4);
                 break;
@@ -368,6 +379,61 @@ OperatorResultType PhysicalPredictionProjection::ProcessSchedExec(ExecutionConte
     return ret;
 }
 
+OperatorResultType PhysicalPredictionProjection::ProcessSchedPoolExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+    GlobalOperatorState &gstate, OperatorState &state_p) const {
+    auto &state = state_p.Cast<PredictionProjectionState>();
+    auto &gstate_c = gstate.Cast<PredictionProjectionGlobalState>();
+    auto ret = OperatorResultType::HAVE_MORE_OUTPUT;
+    
+
+    switch(state.sched_state) {
+        case SchedState::SCHEDULE: {
+            int slot_id; 
+            bool sched_ok = gstate_c.sched->TryDequeue(slot_id);
+            if(sched_ok) {
+                auto slot = gstate_c.slots[slot_id].get();
+                input.Copy(*slot->input);
+                // slot->executor->Execute(*slot->input, *slot->output);
+                slot->task = std::move(state.pgstate->lane_context->ExecuteAsyncFuncPush([slot]() {
+				    slot->executor->Execute(*slot->input, *slot->output);
+			    }));
+                state.sched_slot_ids.push_back(slot_id);
+                ret = OperatorResultType::NEED_MORE_INPUT;
+            } else {
+                state.sched_state = SchedState::OUTPUT;
+            }
+            break;
+        }
+        case SchedState::OUTPUT: {
+            bool has_ready = false;
+            while(state.sched_slot_ids.size()) {
+                for(auto it = state.sched_slot_ids.begin(); it!=state.sched_slot_ids.end(); ++it) {
+                    auto slot = gstate_c.slots[*it].get();
+                    // bool is_ready = slot->task->ExecuteAsyncFuncTryPull();
+                    slot->task->ExecuteAsyncFuncPull();
+                    bool is_ready = true;
+                    if(is_ready){
+                        slot->output->Copy(chunk);
+                        state.sched_slot_ids.erase(it);
+                        gstate_c.sched->Enqueue(*it);
+                        slot->task.reset();
+                        has_ready = true;
+                        break;
+                    }
+                }
+                if(has_ready) {
+                    break;
+                }
+            }
+
+            state.sched_state = SchedState::SCHEDULE;
+        }
+    }
+
+    return ret;
+}
+
+
 OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
                                                GlobalOperatorState &gstate, OperatorState &state_p) const {
     return exec_func(context, input, chunk, gstate, state_p);
@@ -379,7 +445,7 @@ unique_ptr<OperatorState> PhysicalPredictionProjection::GetOperatorState(Executi
 }
 
 unique_ptr<GlobalOperatorState> PhysicalPredictionProjection::GetGlobalOperatorState(ClientContext &context) const {
-    if(pgstate->kind == FunctionKind::SCHEDULE_PREDICTION) {
+    if(pgstate->kind == FunctionKind::SCHEDULE_PREDICTION || pgstate->kind == FunctionKind::THREAD_SCHEDULE_PREDICTION) {
         return make_uniq<PredictionProjectionGlobalState>(pgstate->lane_context->GetSettings(),
          context, select_list, children[0]->GetTypes(), pgstate);
     }
@@ -475,6 +541,41 @@ OperatorFinalizeResultType PhysicalPredictionProjection::ProcessSchedFinalExec(E
     }
     return ret;
 }
+
+OperatorFinalizeResultType PhysicalPredictionProjection::ProcessSchedFinalPoolExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+    OperatorState &state) const {
+    auto &local = state.Cast<PredictionProjectionState>();
+    auto &gstate_c = gstate.Cast<PredictionProjectionGlobalState>();
+
+    auto ret = OperatorFinalizeResultType::HAVE_MORE_OUTPUT;
+    bool has_ready = false;
+
+    while(local.sched_slot_ids.size()) {
+        for(auto it = local.sched_slot_ids.begin(); it!=local.sched_slot_ids.end(); ++it) {
+            auto &slot = *gstate_c.slots[*it];
+            // bool is_ready = slot.task->ExecuteAsyncFuncTryPull();
+            slot.task->ExecuteAsyncFuncPull();
+            bool is_ready = true;
+            if(is_ready){
+                slot.output->Copy(chunk);
+                local.sched_slot_ids.erase(it);
+                gstate_c.sched->Enqueue(*it);
+                slot.task.reset();
+                has_ready = true;
+                break;
+            }
+        }
+        if(has_ready) {
+            return ret;
+        }
+    }
+
+    if(local.sched_slot_ids.size() == 0) {
+        ret = OperatorFinalizeResultType::FINISHED;
+    }
+    return ret;
+}
+
 
 OperatorFinalizeResultType PhysicalPredictionProjection::FinalExecute(ExecutionContext &context,
  DataChunk &chunk, GlobalOperatorState &gstate, OperatorState &state) const {
