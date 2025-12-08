@@ -21,6 +21,7 @@ void DuckDBPyFunctional::Initialize(py::module_ &parent) {
 		.value("PREDICTION", duckdb::PythonUDFKind::PREDICTION)
 		.value("PROCESS_PREDICTION", duckdb::PythonUDFKind::PROCESS_PREDICTION)
 		.value("SCHEDULE_PREDICTION", duckdb::PythonUDFKind::SCHEDULE_PREDICTION)
+		.value("THREAD_SCHEDULE_PREDICTION", duckdb::PythonUDFKind::THREAD_SCHEDULE_PREDICTION)
 		.export_values();
 }
 

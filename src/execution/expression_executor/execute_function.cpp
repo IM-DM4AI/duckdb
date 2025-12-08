@@ -19,6 +19,7 @@ bool IsPredictionFunc(const BoundFunctionExpression &expr) {
 			break;
         case FunctionKind::PROCESS_PREDICTION:
         case FunctionKind::SCHEDULE_PREDICTION:
+		case FunctionKind::THREAD_SCHEDULE_PREDICTION:
             res = true;
             break;
     }
@@ -135,7 +136,7 @@ void ExpressionExecutor::Execute(const BoundFunctionExpression &expr, Expression
 				hint = state_f.sched_hint.get();
 				hint->core_id = prediction::GetCurrentCpu();
 			}
-			if(pgstate->kind == FunctionKind::PROCESS_PREDICTION) {
+			if(pgstate->kind == FunctionKind::PROCESS_PREDICTION || pgstate->kind == FunctionKind::THREAD_SCHEDULE_PREDICTION) {
 				lane_context->ExecuteFunction(expr.function.name, arguments, result, hint);
 			} else {
 				auto &state_f = state->Cast<ExecuteFunctionState>();

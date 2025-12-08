@@ -15,7 +15,8 @@ namespace duckdb{
             this->kind = kind;
             lane_context = nullptr;
             if(kind == FunctionKind::PROCESS_PREDICTION || 
-                kind == FunctionKind::SCHEDULE_PREDICTION) {
+                kind == FunctionKind::SCHEDULE_PREDICTION ||
+                kind == FunctionKind::THREAD_SCHEDULE_PREDICTION) {
                     lane_context = new IMLane::DBEnd::DBEndContext();
                     auto setup_status = lane_context->Setup();
                     if(!(setup_status.kind == IMLane::DBEnd::StatusKind::OK)) {

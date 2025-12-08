@@ -17,6 +17,8 @@ std::string function_kind_to_string(FunctionKind kind){
             return "PROCESS_PREDICTION";
         case FunctionKind::SCHEDULE_PREDICTION:
             return "SCHEDULE_PREDICTION";
+        case FunctionKind::THREAD_SCHEDULE_PREDICTION:
+            return "THREAD_SCHEDULE_PREDICTION";
     }
     return "NO PREDICTION";
 }
@@ -30,6 +32,7 @@ bool PredictionFuncChecker::IsPrediction(FunctionKind kind){
         case FunctionKind::PREDICTION:
         case FunctionKind::PROCESS_PREDICTION:
         case FunctionKind::SCHEDULE_PREDICTION:
+        case FunctionKind::THREAD_SCHEDULE_PREDICTION:
             res = true;
             break;
     }

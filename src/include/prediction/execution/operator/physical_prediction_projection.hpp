@@ -45,6 +45,11 @@ public:
 			GlobalOperatorState &gstate, OperatorState &state_p) const;
 	OperatorFinalizeResultType ProcessSchedFinalExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
 			OperatorState &state) const;
+	
+	OperatorResultType ProcessSchedPoolExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+			GlobalOperatorState &gstate, OperatorState &state_p) const;
+	OperatorFinalizeResultType ProcessSchedFinalPoolExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+			OperatorState &state) const;
 
 public:
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;
