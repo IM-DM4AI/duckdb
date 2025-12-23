@@ -42,10 +42,11 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalProjection
 	
 	// Prediction optimization: check the expression list
 	// try to extract prediction function and transform it as a standalone physical projection operator
-	// Optimization condition： only one prediction function appears in "op.expressions" 
+	// Optimization condition：more than one prediction function with process prediction kind,  
+	// or only one prediction function appears in "op.expressions" 
 	PredictionFuncChecker func_checker(op.expressions);
 
-	if(func_checker.CheckExprs([&](idx_t count){return count == 1;})) {
+	if(func_checker.CheckExprs([&](idx_t count){return count >= 1;}, PredictionFuncChecker::IsProcessPrediction)) {
 		auto root_idx = *func_checker.root_idx_list.begin();
 		auto prediction_size = func_checker.user_batch_size_map[root_idx];
 
@@ -53,8 +54,18 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalProjection
 		 op.estimated_cardinality, prediction_size, func_checker.kind);
 		prediction_projection->children.push_back(std::move(plan));
 		return std::move(prediction_projection);
-	}
+	} else {
+		if(func_checker.CheckExprs([&](idx_t count){return count == 1;}, PredictionFuncChecker::IsPrediction)) {
+			auto root_idx = *func_checker.root_idx_list.begin();
+			auto prediction_size = func_checker.user_batch_size_map[root_idx];
 	
+			auto prediction_projection =  make_uniq<PhysicalPredictionProjection>(op.types, std::move(op.expressions),
+			 op.estimated_cardinality, prediction_size, func_checker.kind);
+			prediction_projection->children.push_back(std::move(plan));
+			return std::move(prediction_projection);
+		}
+	}
+
 	// Fallback to the normal plan generation path
 	auto projection = make_uniq<PhysicalProjection>(op.types, std::move(op.expressions), op.estimated_cardinality);
 	projection->children.push_back(std::move(plan));

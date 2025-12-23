@@ -30,9 +30,10 @@ public:
 
     // Check wheather multiple expressions satisfy the optimization constraints,
     // also collect the prediction function info.
-    bool CheckExprs(std::function<bool(idx_t)> constraint);
+    bool CheckExprs(std::function<bool(idx_t)> constraint, std::function<bool(FunctionKind)> kind_constraint = IsPrediction);
 
-    bool IsPrediction(FunctionKind kind);
+    static bool IsPrediction(FunctionKind kind);
+    static bool IsProcessPrediction(FunctionKind kind);
 
     vector<idx_t> user_batch_size_map;
     set<idx_t> root_idx_list;
@@ -42,9 +43,9 @@ public:
 private:
 
     vector<unique_ptr<Expression>>& expressions;
-	void VisitExpression(unique_ptr<Expression> *expression, idx_t root_idx);
+	void VisitExpression(unique_ptr<Expression> *expression, idx_t root_idx, std::function<bool(FunctionKind)> kind_constraint);
 
-	void VisitExpressionChild(Expression &expression, idx_t root_idx);
+	void VisitExpressionChild(Expression &expression, idx_t root_idx, std::function<bool(FunctionKind)> kind_constraint);
 
 };
 

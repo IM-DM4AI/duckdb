@@ -332,6 +332,7 @@ OperatorResultType PhysicalPredictionProjection::ProcessExec(ExecutionContext &c
         return OperatorResultType::NEED_MORE_INPUT;
 }
 
+// Cooperative schedule may have dead lock bug when multiple udfs in different ops.
 OperatorResultType PhysicalPredictionProjection::ProcessSchedExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
     GlobalOperatorState &gstate, OperatorState &state_p) const {
     auto &state = state_p.Cast<PredictionProjectionState>();
@@ -397,6 +398,9 @@ OperatorResultType PhysicalPredictionProjection::ProcessSchedPoolExec(ExecutionC
                 slot->task = std::move(state.pgstate->lane_context->ExecuteAsyncFuncPush([slot]() {
 				    slot->executor->Execute(*slot->input, *slot->output);
 			    }));
+                if(slot->task == nullptr) {
+                    throw std::runtime_error("Failed to create async task");
+                }
                 state.sched_slot_ids.push_back(slot_id);
                 ret = OperatorResultType::NEED_MORE_INPUT;
             } else {
@@ -410,13 +414,15 @@ OperatorResultType PhysicalPredictionProjection::ProcessSchedPoolExec(ExecutionC
                 for(auto it = state.sched_slot_ids.begin(); it!=state.sched_slot_ids.end(); ++it) {
                     auto slot = gstate_c.slots[*it].get();
                     // bool is_ready = slot->task->ExecuteAsyncFuncTryPull();
+                    if(slot->task == nullptr) {
+                        throw std::runtime_error("Failed to get async task");
+                    }
                     slot->task->ExecuteAsyncFuncPull();
                     bool is_ready = true;
                     if(is_ready){
                         slot->output->Copy(chunk);
                         state.sched_slot_ids.erase(it);
                         gstate_c.sched->Enqueue(*it);
-                        slot->task.reset();
                         has_ready = true;
                         break;
                     }
@@ -454,6 +460,7 @@ unique_ptr<GlobalOperatorState> PhysicalPredictionProjection::GetGlobalOperatorS
 
 string PhysicalPredictionProjection::ParamsToString() const {
 	string extra_info;
+    extra_info += "Expression Num: " + std::to_string(select_list.size()) + "\n";
 	for (auto &expr : select_list) {
 		extra_info += expr->GetName() + "\n";
 	}
