@@ -26,15 +26,29 @@ public:
 
 	std::function<OperatorResultType(ExecutionContext&, DataChunk&,
 		DataChunk&, GlobalOperatorState&, OperatorState&)> exec_func;
+   
+	std::function<OperatorFinalizeResultType(ExecutionContext&,
+		DataChunk&, GlobalOperatorState&, OperatorState&)> final_exec_func;
 
    OperatorResultType BatchingExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 		   GlobalOperatorState &gstate, OperatorState &state) const;
+	OperatorFinalizeResultType BatchingFinalExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+			OperatorState &state) const;
    
    OperatorResultType ProcessExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 		   GlobalOperatorState &gstate, OperatorState &state) const;
+	OperatorFinalizeResultType ProcessFinalExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+		OperatorState &state) const;
 
    OperatorResultType ProcessSchedExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 		   GlobalOperatorState &gstate, OperatorState &state) const;
+	OperatorFinalizeResultType ProcessSchedFinalExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+			OperatorState &state) const;
+
+	OperatorResultType ProcessSchedPoolExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+			GlobalOperatorState &gstate, OperatorState &state_p) const;
+	OperatorFinalizeResultType ProcessSchedFinalPoolExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+			OperatorState &state) const;
 
 public:
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;

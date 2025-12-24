@@ -40,6 +40,45 @@ public:
 	}
 };
 
+struct FilterLaneSlot {
+    unique_ptr<ExpressionExecutor> executor;
+    unique_ptr<DataChunk> input;
+    unique_ptr<DataChunk> output;
+    SelectionVector sel;
+    std::unique_ptr<IMLane::DBEnd::ExecAsyncFuncContext> task;
+
+    FilterLaneSlot(ClientContext &context, Expression *expression,
+     const vector<LogicalType> &input_types, const vector<LogicalType> &output_types, PredictionGlobalState* pgstate):
+     sel(STANDARD_VECTOR_SIZE) {
+            input = make_uniq<DataChunk>();
+            output = make_uniq<DataChunk>();
+            executor = make_uniq<ExpressionExecutor>(context, *expression);
+
+            executor->SetPredictionGlobalState(pgstate);
+
+            input->Initialize(context, input_types);
+            output->Initialize(context, output_types);
+    }
+};
+
+class PredictionFilterGlobalState: public PredictionOpGlobalState {
+public:
+    explicit PredictionFilterGlobalState(const IMLane::DBEnd::IMSettings settings, 
+    ClientContext &context, Expression *expression,
+     const vector<LogicalType> &input_types, PredictionGlobalState* pgstate): 
+        PredictionOpGlobalState(settings) {
+        auto num_slots = settings.n_executors;
+
+        for(int i = 0; i < num_slots; i++) {
+            sched->Enqueue(i);
+            auto pslot = make_uniq<FilterLaneSlot>(context, expression, input_types, input_types, pgstate);
+            slots.push_back(std::move(pslot));
+        }
+    }
+    vector<unique_ptr<FilterLaneSlot>> slots;
+};
+
+
 bool PhysicalPredictionFilter::CanCacheType(const LogicalType &type) {
 	switch (type.id()) {
 	case LogicalTypeId::LIST:
@@ -61,7 +100,8 @@ bool PhysicalPredictionFilter::CanCacheType(const LogicalType &type) {
 }
 
 PhysicalPredictionFilter::PhysicalPredictionFilter(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list,
- idx_t estimated_cardinality, idx_t user_defined_size, FunctionKind kind): PhysicalOperator(PhysicalOperatorType::PREDICTION_FILTER, std::move(types), estimated_cardinality), kind(kind) {
+ idx_t estimated_cardinality, idx_t user_defined_size, FunctionKind kind): 
+ PhysicalOperator(PhysicalOperatorType::PREDICTION_FILTER, std::move(types), estimated_cardinality), kind(kind) {
 	D_ASSERT(select_list.size() > 0);
 	if (select_list.size() > 1) {
 		// create a big AND out of the expressions
@@ -82,16 +122,52 @@ PhysicalPredictionFilter::PhysicalPredictionFilter(vector<LogicalType> types, ve
         use_adaptive_size = false;
     }
 
-    if(pgstate->IMLaneOptimize()) {
-        exec_func = std::bind(&PhysicalPredictionFilter::ProcessExec, this, 
-        std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4,
-        std::placeholders::_5);
-    } else {
-        exec_func = std::bind(&PhysicalPredictionFilter::BatchingExec, this, 
-            std::placeholders::_1, std::placeholders::_2,
-            std::placeholders::_3, std::placeholders::_4,
-            std::placeholders::_5);
+    pgstate = new PredictionGlobalState(kind);
+
+    switch(pgstate->kind) {
+        case FunctionKind::PREDICTION: {
+            exec_func = std::bind(&PhysicalPredictionFilter::BatchingExec, this, 
+                std::placeholders::_1, std::placeholders::_2,
+                std::placeholders::_3, std::placeholders::_4,
+                std::placeholders::_5);
+            final_exec_func = std::bind(&PhysicalPredictionFilter::BatchingFinalExec, this, 
+                std::placeholders::_1, std::placeholders::_2,
+                std::placeholders::_3, std::placeholders::_4);
+            break;
+        }
+        case FunctionKind::PROCESS_PREDICTION: {
+            exec_func = std::bind(&PhysicalPredictionFilter::ProcessExec, this, 
+                std::placeholders::_1, std::placeholders::_2,
+                std::placeholders::_3, std::placeholders::_4,
+                std::placeholders::_5);
+            final_exec_func = std::bind(&PhysicalPredictionFilter::ProcessFinalExec, this, 
+                std::placeholders::_1, std::placeholders::_2,
+                std::placeholders::_3, std::placeholders::_4);
+            break;
+        }
+        case FunctionKind::SCHEDULE_PREDICTION: {
+            exec_func = std::bind(&PhysicalPredictionFilter::ProcessSchedExec, this, 
+                std::placeholders::_1, std::placeholders::_2,
+                std::placeholders::_3, std::placeholders::_4,
+                std::placeholders::_5);
+            final_exec_func = std::bind(&PhysicalPredictionFilter::ProcessSchedFinalExec, this, 
+                std::placeholders::_1, std::placeholders::_2,
+                std::placeholders::_3, std::placeholders::_4);
+            break;
+        }
+        case FunctionKind::THREAD_SCHEDULE_PREDICTION: {
+            exec_func = std::bind(&PhysicalPredictionFilter::ProcessSchedPoolExec, this, 
+                std::placeholders::_1, std::placeholders::_2,
+                std::placeholders::_3, std::placeholders::_4,
+                std::placeholders::_5);
+            final_exec_func = std::bind(&PhysicalPredictionFilter::ProcessSchedFinalPoolExec, this, 
+                std::placeholders::_1, std::placeholders::_2,
+                std::placeholders::_3, std::placeholders::_4);
+            break;
+        }
+        default: {
+            throw InternalException("Unsupported Prediction Function Kind.");
+        }
     }
 
     caching_supported = true;
@@ -101,8 +177,6 @@ PhysicalPredictionFilter::PhysicalPredictionFilter(vector<LogicalType> types, ve
             break;
         }
     }
-
-    pgstate = new PredictionGlobalState(kind);
 }
 
 OperatorResultType PhysicalPredictionFilter::BatchingExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
@@ -230,11 +304,76 @@ OperatorResultType PhysicalPredictionFilter::ProcessSchedExec(ExecutionContext &
     return OperatorResultType::FINISHED;
 }
 
+OperatorResultType PhysicalPredictionFilter::ProcessSchedPoolExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+    GlobalOperatorState &gstate, OperatorState &state_p) const {
+        auto &state = state_p.Cast<PredictionFilterState>();
+        auto &gstate_c = gstate.Cast<PredictionFilterGlobalState>();
+        auto ret = OperatorResultType::HAVE_MORE_OUTPUT;
+    
+        switch(state.sched_state) {
+            case SchedState::SCHEDULE: {
+                int slot_id; 
+                bool sched_ok = gstate_c.sched->TryDequeue(slot_id);
+                if(sched_ok) {
+                    auto slot = gstate_c.slots[slot_id].get();
+                    input.Copy(*slot->input);
+                    // slot->executor->Execute(*slot->input, *slot->output);
+                    slot->task = std::move(state.pgstate->lane_context->ExecuteAsyncFuncPush([slot]() {
+                        idx_t result_count = slot->executor->SelectExpression(*slot->input, slot->sel);
+                        if (result_count == slot->input->size()) {
+                            // nothing was filtered: skip adding any selection vectors
+                            slot->output->Reference(*slot->input);
+                        } else {
+                            slot->output->Slice(*slot->input, slot->sel, result_count);
+                        }
+                    }));
+                    if(slot->task == nullptr) {
+                        throw std::runtime_error("Failed to create async task");
+                    }
+                    state.sched_slot_ids.push_back(slot_id);
+                    ret = OperatorResultType::NEED_MORE_INPUT;
+                } else {
+                    state.sched_state = SchedState::OUTPUT;
+                }
+                break;
+            }
+            case SchedState::OUTPUT: {
+                bool has_ready = false;
+                while(state.sched_slot_ids.size()) {
+                    for(auto it = state.sched_slot_ids.begin(); it!=state.sched_slot_ids.end(); ++it) {
+                        auto slot = gstate_c.slots[*it].get();
+                        // bool is_ready = slot->task->ExecuteAsyncFuncTryPull();
+                        slot->task->ExecuteAsyncFuncPull();
+                        bool is_ready = true;
+                        if(is_ready){
+                            slot->output->Copy(chunk);
+                            state.sched_slot_ids.erase(it);
+                            gstate_c.sched->Enqueue(*it);
+                            has_ready = true;
+                            break;
+                        }
+                    }
+                    if(has_ready) {
+                        break;
+                    }
+                }
+    
+                state.sched_state = SchedState::SCHEDULE;
+            }
+        }
+    
+        return ret;
+}
+
 unique_ptr<OperatorState> PhysicalPredictionFilter::GetOperatorState(ExecutionContext &context) const {
 	return make_uniq<PredictionFilterState>(context, pgstate,  *expression, children[0]->GetTypes(), user_defined_size, use_adaptive_size);
 }
 
 unique_ptr<GlobalOperatorState> PhysicalPredictionFilter::GetGlobalOperatorState(ClientContext &context) const {
+    if(pgstate->kind == FunctionKind::SCHEDULE_PREDICTION || pgstate->kind == FunctionKind::THREAD_SCHEDULE_PREDICTION) {
+        return make_uniq<PredictionFilterGlobalState>(pgstate->lane_context->GetSettings(),
+         context, expression.get(), children[0]->GetTypes(), pgstate);
+    }
     return make_uniq<GlobalOperatorState>();
 }
 
@@ -280,50 +419,94 @@ OperatorResultType PhysicalPredictionFilter::Execute(ExecutionContext &context, 
     return exec_func(context, input, chunk, gstate, state);
 }
 
+OperatorFinalizeResultType  PhysicalPredictionFilter::BatchingFinalExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+    OperatorState &state) const{
+        auto &local = state.Cast<PredictionFilterState>();
+        auto &controller = local.controller;
+        auto &sel = local.sel;
+    
+        auto &output_left = local.output_left;
+        auto &base_offset = local.base_offset;
+    
+        idx_t batch_size = local.prediction_size;
+    
+        auto ret = OperatorFinalizeResultType::FINISHED;
+    
+        // batch adapting for the rest of output chunk
+        if (output_left) {
+            if (output_left <= STANDARD_VECTOR_SIZE) {
+                controller->BatchAdapting(controller->CurrentBatch(), sel, chunk, base_offset, output_left);
+                output_left = 0;
+                base_offset = 0;
+            } else {
+                controller->BatchAdapting(controller->CurrentBatch(), sel, chunk, base_offset);
+                output_left -= STANDARD_VECTOR_SIZE;
+                base_offset += STANDARD_VECTOR_SIZE;
+            }
+    
+            ret = OperatorFinalizeResultType::HAVE_MORE_OUTPUT;
+    
+            return ret;
+        }
+    
+        if (controller->HasNext(batch_size)) {
+            ret = NextEvalAdapt(local, batch_size, chunk,
+             OperatorFinalizeResultType::HAVE_MORE_OUTPUT, OperatorFinalizeResultType::HAVE_MORE_OUTPUT);
+        } else {
+            if (controller->GetSize() > 0) {
+                ret = NextEvalAdapt(local, controller->GetSize(), chunk,
+                OperatorFinalizeResultType::HAVE_MORE_OUTPUT, OperatorFinalizeResultType::FINISHED);
+            } 
+        }
+    
+        return ret;
+}
+
+OperatorFinalizeResultType  PhysicalPredictionFilter::ProcessFinalExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+OperatorState &state) const{
+    return OperatorFinalizeResultType::FINISHED;
+}
+
+OperatorFinalizeResultType  PhysicalPredictionFilter::ProcessSchedFinalExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+    OperatorState &state) const {
+    return OperatorFinalizeResultType::FINISHED;
+}
+OperatorFinalizeResultType  PhysicalPredictionFilter::ProcessSchedFinalPoolExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+    OperatorState &state) const {
+        auto &local = state.Cast<PredictionFilterState>();
+        auto &gstate_c = gstate.Cast<PredictionFilterGlobalState>();
+    
+        auto ret = OperatorFinalizeResultType::HAVE_MORE_OUTPUT;
+        bool has_ready = false;
+    
+        while(local.sched_slot_ids.size()) {
+            for(auto it = local.sched_slot_ids.begin(); it!=local.sched_slot_ids.end(); ++it) {
+                auto &slot = *gstate_c.slots[*it];
+                // bool is_ready = slot.task->ExecuteAsyncFuncTryPull();
+                slot.task->ExecuteAsyncFuncPull();
+                bool is_ready = true;
+                if(is_ready){
+                    slot.output->Copy(chunk);
+                    local.sched_slot_ids.erase(it);
+                    gstate_c.sched->Enqueue(*it);
+                    has_ready = true;
+                    break;
+                }
+            }
+            if(has_ready) {
+                return ret;
+            }
+        }
+    
+        if(local.sched_slot_ids.size() == 0) {
+            ret = OperatorFinalizeResultType::FINISHED;
+        }
+        return ret;
+}
+
 OperatorFinalizeResultType PhysicalPredictionFilter::FinalExecute(ExecutionContext &context,
  DataChunk &chunk, GlobalOperatorState &gstate, OperatorState &state) const {
-    if(pgstate->IMLaneOptimize()) {
-        return OperatorFinalizeResultType::FINISHED;
-    }
-    auto &local = state.Cast<PredictionFilterState>();
-    auto &controller = local.controller;
-    auto &sel = local.sel;
-
-    auto &output_left = local.output_left;
-    auto &base_offset = local.base_offset;
-
-    idx_t batch_size = local.prediction_size;
-
-    auto ret = OperatorFinalizeResultType::FINISHED;
-
-    // batch adapting for the rest of output chunk
-    if (output_left) {
-        if (output_left <= STANDARD_VECTOR_SIZE) {
-            controller->BatchAdapting(controller->CurrentBatch(), sel, chunk, base_offset, output_left);
-            output_left = 0;
-            base_offset = 0;
-        } else {
-            controller->BatchAdapting(controller->CurrentBatch(), sel, chunk, base_offset);
-            output_left -= STANDARD_VECTOR_SIZE;
-            base_offset += STANDARD_VECTOR_SIZE;
-        }
-
-        ret = OperatorFinalizeResultType::HAVE_MORE_OUTPUT;
-
-        return ret;
-    }
-
-    if (controller->HasNext(batch_size)) {
-        ret = NextEvalAdapt(local, batch_size, chunk,
-         OperatorFinalizeResultType::HAVE_MORE_OUTPUT, OperatorFinalizeResultType::HAVE_MORE_OUTPUT);
-    } else {
-        if (controller->GetSize() > 0) {
-            ret = NextEvalAdapt(local, controller->GetSize(), chunk,
-            OperatorFinalizeResultType::HAVE_MORE_OUTPUT, OperatorFinalizeResultType::FINISHED);
-        } 
-    }
-
-    return ret;
+    return final_exec_func(context, chunk, gstate, state);
  }
 
 string PhysicalPredictionFilter::ParamsToString() const {

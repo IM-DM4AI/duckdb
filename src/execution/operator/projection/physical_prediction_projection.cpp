@@ -567,7 +567,6 @@ OperatorFinalizeResultType PhysicalPredictionProjection::ProcessSchedFinalPoolEx
                 slot.output->Copy(chunk);
                 local.sched_slot_ids.erase(it);
                 gstate_c.sched->Enqueue(*it);
-                slot.task.reset();
                 has_ready = true;
                 break;
             }
