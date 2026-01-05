@@ -50,7 +50,8 @@ namespace duckdb {
                 bool IMLaneOptimize() {
                     return kind == FunctionKind::PROCESS_PREDICTION || 
                     kind == FunctionKind::SCHEDULE_PREDICTION ||
-                    kind == FunctionKind::THREAD_SCHEDULE_PREDICTION;
+                    kind == FunctionKind::THREAD_SCHEDULE_PREDICTION ||
+                    kind == FunctionKind::THREAD_SCHEDULE_PREDICTION_WITH_BATCHING;
                 }
     
                 IMLane::DBEnd::DBEndContext* lane_context;

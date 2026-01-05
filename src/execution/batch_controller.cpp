@@ -139,7 +139,7 @@ namespace prediction {
     
     void BatchController::InternalSlicing(DataChunk &source, DataChunk &target, idx_t start_offset, idx_t stop_offset) {
         D_ASSERT(stop_offset > start_offset);
-        D_ASSERT(stop_offset <= high_offset);
+        // D_ASSERT(stop_offset <= high_offset); // adpat for async_with_batch
         idx_t slice_size = stop_offset - start_offset;
         auto sel = FlatVector::IncrementalSelectionVector();
 

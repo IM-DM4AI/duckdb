@@ -51,6 +51,12 @@ public:
 	OperatorFinalizeResultType ProcessSchedFinalPoolExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
 			OperatorState &state) const;
 
+	OperatorResultType ProcessSchedPoolWithBatchingExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+    GlobalOperatorState &gstate, OperatorState &state_p) const;
+
+	OperatorFinalizeResultType ProcessSchedFinalPoolWithBatchingExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+    OperatorState &state) const;
+
 public:
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;
 	unique_ptr<GlobalOperatorState> GetGlobalOperatorState(ClientContext &context) const override;
@@ -60,6 +66,9 @@ public:
 
 	template<typename RET_TYPE>
 	RET_TYPE NextEvalAdapt(OperatorState &state, idx_t batch_size, DataChunk &chunk, RET_TYPE ret_adapt, RET_TYPE no_adapt) const;
+
+	template<typename RET_TYPE>
+	RET_TYPE NextEvalAdaptWithSchedule(OperatorState &state, GlobalOperatorState &gstate, idx_t batch_size, DataChunk &chunk, RET_TYPE ret_adapt, RET_TYPE no_adapt) const;
 
 	bool ParallelOperator() const override {
 		return true;
