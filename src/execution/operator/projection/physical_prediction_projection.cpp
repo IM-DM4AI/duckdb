@@ -180,6 +180,16 @@ PhysicalPredictionProjection::PhysicalPredictionProjection(vector<LogicalType> t
                     std::placeholders::_3, std::placeholders::_4);
                 break;
             }
+            case FunctionKind::THREAD_SCHEDULE_PREDICTION_WITH_BATCHING: {
+                exec_func = std::bind(&PhysicalPredictionProjection::ProcessSchedPoolWithBatchingExec, this, 
+                    std::placeholders::_1, std::placeholders::_2,
+                    std::placeholders::_3, std::placeholders::_4,
+                    std::placeholders::_5);
+                final_exec_func = std::bind(&PhysicalPredictionProjection::ProcessSchedFinalPoolWithBatchingExec, this, 
+                    std::placeholders::_1, std::placeholders::_2,
+                    std::placeholders::_3, std::placeholders::_4);
+                break;
+            }
             default: {
                 throw InternalException("Unsupported Prediction Function Kind.");
             }
@@ -227,6 +237,77 @@ RET_TYPE PhysicalPredictionProjection::NextEvalAdapt(OperatorState &state, idx_t
 
     return ret;
 }
+
+template<typename RET_TYPE>
+RET_TYPE PhysicalPredictionProjection::NextEvalAdaptWithSchedule(OperatorState &state, GlobalOperatorState &gstate, idx_t batch_size, DataChunk &chunk,
+ RET_TYPE ret_adapt, RET_TYPE no_adapt) const {
+    auto &local = state.Cast<PredictionProjectionState>();
+    auto &gstate_c = gstate.Cast<PredictionProjectionGlobalState>();
+    auto &controller = local.controller;
+    auto &out_buf = local.output_buffer;
+    auto &tuner = local.tuner;
+
+    RET_TYPE ret = no_adapt;
+
+    switch(local.sched_state){
+        case SchedState::SCHEDULE: {
+            int slot_id;
+            bool sched_ok = gstate_c.sched->TryDequeue(slot_id);
+            if(sched_ok){
+                auto slot = gstate_c.slots[slot_id].get();
+                auto &batch = controller->NextBatch(batch_size);
+                controller->ExternalProjectionReset(*slot->output, *slot->executor);
+                if(slot->input->GetCapacity() < batch.GetCapacity()){ 
+                    // adapt scale size 
+                    // chunk.Append have some bugs
+                    for(idx_t i = 0;i < slot->input->ColumnCount();i++){
+                        slot->input->data[i].Resize(0, batch.GetCapacity());
+                    }
+                    slot->input->SetCapacity(batch.GetCapacity());
+                }
+                batch.Copy(*slot->input);
+                slot->task = std::move(local.pgstate->lane_context->ExecuteAsyncFuncPush([slot, ret_adapt, no_adapt](){
+                    slot->executor->Execute(*slot->input, *slot->output);
+                }));
+                local.sched_slot_ids.push_back(slot_id);
+                ret = no_adapt;
+            }else{
+                local.sched_state = SchedState::OUTPUT;
+                ret = ret_adapt;
+            }
+            break;
+        }
+        case SchedState::OUTPUT: {
+            bool has_ready = false;
+            while(local.sched_slot_ids.size()){
+                for(auto it = local.sched_slot_ids.begin(); it != local.sched_slot_ids.end();++it){
+                    auto slot = gstate_c.slots[*it].get();
+                    slot->task->ExecuteAsyncFuncPull();
+                    bool is_ready = true;
+                    if(is_ready){
+                        out_buf->Reset();
+                        out_buf->Append(*slot->output, true);
+                        local.output_left = slot->output->size();
+                        local.sched_slot_ids.erase(it);
+                        gstate_c.sched->Enqueue(*it);
+                        slot->task.reset();
+                        has_ready = true;
+                        break;
+                    }
+                }
+                if(has_ready){
+                    ret = ret_adapt;
+                    break;
+                }
+            }
+            local.sched_state = SchedState::SCHEDULE;
+            break;
+        }
+    }
+
+    return ret;
+}
+
 
 OperatorResultType PhysicalPredictionProjection::BatchingExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
     GlobalOperatorState &gstate, OperatorState &state_p) const {
@@ -439,6 +520,120 @@ OperatorResultType PhysicalPredictionProjection::ProcessSchedPoolExec(ExecutionC
     return ret;
 }
 
+OperatorResultType PhysicalPredictionProjection::ProcessSchedPoolWithBatchingExec(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+    GlobalOperatorState &gstate, OperatorState &state_p) const {
+        auto &state = state_p.Cast<PredictionProjectionState>();
+
+        auto &controller = state.controller;
+        auto &out_buf = state.output_buffer;
+        auto &padded = state.padded;
+        auto &output_left = state.output_left;
+        auto &base_offset = state.base_offset;
+        idx_t &batch_size = state.prediction_size;
+        if (!state.initialized) {
+            state.initialized = true;
+            state.can_cache_chunk = caching_supported && PhysicalOperator::OperatorCachingAllowed(context);
+        }
+        if(!state.can_cache_chunk){
+            state.executor.Execute(input, chunk);
+            return OperatorResultType::NEED_MORE_INPUT;
+        }
+
+        auto ret = OperatorResultType::HAVE_MORE_OUTPUT;
+
+        // batch adapting
+        if (output_left) {
+            if (output_left <= STANDARD_VECTOR_SIZE) {
+                controller->BatchAdapting(*out_buf, chunk, base_offset, output_left);
+                output_left = 0;
+                base_offset = 0;
+            } else {
+                controller->BatchAdapting(*out_buf, chunk, base_offset);
+                output_left -= STANDARD_VECTOR_SIZE;
+                base_offset += STANDARD_VECTOR_SIZE;
+            }
+
+            return ret;
+        }
+        // different with batching
+        // this only SLCING will triger expression execute
+        // EMPTY use to run the padded data
+        // BUFFERING will only cache data, only buffer_size > batch_size, transform to SLICING
+        switch (controller->GetState()) {
+        case BatchControllerState::SLICING: {
+            batch_size = state.tuner.GetBatchSize();
+            auto sched_state = state.sched_state;
+            auto no_adapt = OperatorResultType::FINISHED; // no_res, there is no output from async
+            auto ret_adapt = OperatorResultType::HAVE_MORE_OUTPUT; // has_res, there is an output for async
+            if (controller->HasNext(batch_size)) {
+                bool check_sched_state = (sched_state == SchedState::SCHEDULE);
+                ret = NextEvalAdaptWithSchedule(state, gstate, batch_size, chunk, ret_adapt, no_adapt);
+                if(check_sched_state){
+                    if(ret == no_adapt){ // push task to lane，'sliced' have copied, remove it.
+                        controller->SetState(BatchControllerState::EMPTY); // now we can save padded data to buffer
+                    } 
+                    // no slot avaliable, 'sliced' didn't copy, saving it
+                    // stay in SLICING state -> next sched_state will be OUTPUT
+                }
+                ret = OperatorResultType::HAVE_MORE_OUTPUT;
+                // SchedState::OUTPUT
+                // has output to return(ret_adapt), but the input not used, keep slice
+                // no output to return(no_adapt), stay in SLICING state
+            } else {
+                // check wheather the buffer should be reset
+                if (controller->GetSize() == 0) {
+                    // the buffer state is reset to EMPTY
+                    controller->ResetBuffer();
+                } else {
+                    controller->SetState(BatchControllerState::BUFFERRING);
+                }
+                ret = OperatorResultType::NEED_MORE_INPUT;
+            }
+            
+            break;
+        }
+        case BatchControllerState::EMPTY: {
+            batch_size = state.tuner.GetBatchSize();
+            controller->ResetBuffer();
+            idx_t remained = input.size() - padded;
+            ret = OperatorResultType::NEED_MORE_INPUT;
+
+            if (remained > 0) {
+                controller->PushChunk(input, padded, input.size());
+                if (remained < batch_size) {
+                    controller->SetState(BatchControllerState::BUFFERRING); 
+                } else {
+                    // opt: perform slicing directly
+                    controller->SetState(BatchControllerState::SLICING);
+                    ret = OperatorResultType::HAVE_MORE_OUTPUT;
+                }
+            }
+            padded = 0;
+            break;
+        }
+        case BatchControllerState::BUFFERRING: {
+            batch_size = state.tuner.GetBatchSize();
+
+            if (controller->GetSize() + input.size() < batch_size) {
+                controller->PushChunk(input);
+                controller->SetState(BatchControllerState::BUFFERRING);
+                ret = OperatorResultType::NEED_MORE_INPUT;
+            } else {
+                padded = batch_size - controller->GetSize();
+                controller->PushChunk(input, 0, padded);
+                ret = OperatorResultType::HAVE_MORE_OUTPUT;
+                controller->SetState(BatchControllerState::SLICING);
+            }  
+            break;
+        }
+        
+        default:
+            throw InternalException("BatchController State Unsupported");
+        }
+
+        return ret;
+}
+
 
 OperatorResultType PhysicalPredictionProjection::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
                                                GlobalOperatorState &gstate, OperatorState &state_p) const {
@@ -451,7 +646,9 @@ unique_ptr<OperatorState> PhysicalPredictionProjection::GetOperatorState(Executi
 }
 
 unique_ptr<GlobalOperatorState> PhysicalPredictionProjection::GetGlobalOperatorState(ClientContext &context) const {
-    if(pgstate->kind == FunctionKind::SCHEDULE_PREDICTION || pgstate->kind == FunctionKind::THREAD_SCHEDULE_PREDICTION) {
+    if(pgstate->kind == FunctionKind::SCHEDULE_PREDICTION || 
+       pgstate->kind == FunctionKind::THREAD_SCHEDULE_PREDICTION ||
+       pgstate->kind == FunctionKind::THREAD_SCHEDULE_PREDICTION_WITH_BATCHING) {
         return make_uniq<PredictionProjectionGlobalState>(pgstate->lane_context->GetSettings(),
          context, select_list, children[0]->GetTypes(), pgstate);
     }
@@ -581,6 +778,54 @@ OperatorFinalizeResultType PhysicalPredictionProjection::ProcessSchedFinalPoolEx
     }
     return ret;
 }
+
+OperatorFinalizeResultType PhysicalPredictionProjection::ProcessSchedFinalPoolWithBatchingExec(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
+    OperatorState &state) const {
+    auto &local = state.Cast<PredictionProjectionState>();
+    auto &controller = local.controller;
+    auto &out_buf = local.output_buffer;
+
+    auto &output_left = local.output_left;
+    auto &base_offset = local.base_offset;
+
+    idx_t batch_size = local.prediction_size;
+
+    auto ret = OperatorFinalizeResultType::FINISHED;
+
+    // batch adapting for the rest of output chunk
+    if (output_left) {
+        if (output_left <= STANDARD_VECTOR_SIZE) {
+            controller->BatchAdapting(*out_buf, chunk, base_offset, output_left);
+            output_left = 0;
+            base_offset = 0;
+        } else {
+            controller->BatchAdapting(*out_buf, chunk, base_offset);
+            output_left -= STANDARD_VECTOR_SIZE;
+            base_offset += STANDARD_VECTOR_SIZE;
+        }
+
+        ret = OperatorFinalizeResultType::HAVE_MORE_OUTPUT;
+
+        return ret;
+    }
+
+    if (controller->HasNext(batch_size)) { // buffer_size > batch_size
+        ret = NextEvalAdaptWithSchedule(local, gstate, batch_size, chunk,
+         OperatorFinalizeResultType::HAVE_MORE_OUTPUT, OperatorFinalizeResultType::HAVE_MORE_OUTPUT);
+    }else if(controller->GetSize()){ // 0 < buffer_size < batch_size
+        // differen in batch_size compared with condition 1.
+        ret = NextEvalAdaptWithSchedule(local, gstate, controller->GetSize(), chunk,
+         OperatorFinalizeResultType::HAVE_MORE_OUTPUT, OperatorFinalizeResultType::HAVE_MORE_OUTPUT);
+    } else { // buffer_size == 0
+        local.sched_state = SchedState::OUTPUT;
+        if(local.sched_slot_ids.size()) { // handle all future
+            ret = NextEvalAdaptWithSchedule(local, gstate, 0, chunk,
+         OperatorFinalizeResultType::HAVE_MORE_OUTPUT, OperatorFinalizeResultType::HAVE_MORE_OUTPUT);
+        }
+    }
+    return ret;
+}
+
 
 
 OperatorFinalizeResultType PhysicalPredictionProjection::FinalExecute(ExecutionContext &context,
